@@ -354,26 +354,32 @@ export default function App() {
     }
     const lundi=isoWeekToMonday(newSem.annee,newSem.num);
     const feries={...getFeries(newSem.annee-1),...getFeries(newSem.annee),...getFeries(newSem.annee+1)};
-    const jours=JOURS.map((_,i)=>{
+    // Générer les jours de base (sans heures — dépend du salarié)
+    const joursBase=JOURS.map((_,i)=>{
       const d=addDays(lundi,i);
       const ds=fmtDate(d);
       const ferie=feries[ds];
       const hRef=hStd(ds);
-      return {idx:i,dateStr:ds,ferie:ferie||null,heures:ferie?String(hRef):"",
+      return {idx:i,dateStr:ds,ferie:ferie||null,
               absHeures:ferie?String(hRef):"",motifAbs:ferie?"Jour férié":"",
-              chantier:"",zone:null,vehEnt:false,valide:false};
+              chantier:"",zone:null,zoneForce:null,vehEnt:false,valide:false};
     });
-    // Mois de la semaine = mois du lundi (ou du mercredi si à cheval)
     const moisSem = addDays(lundi,2).getMonth()+1;
     const anneeSem = addDays(lundi,2).getFullYear();
     const sem={
       id:`${newSem.annee}-S${newSem.num}`,
       numSem:newSem.num, annee:newSem.annee,
       mois:moisSem, lundi:fmtDate(lundi),
-      saisies: Object.fromEntries(salaries.map(s=>[s.id,{
-        jours: jours.map(j=>({...j})),
-        absences:[], primes:[]
-      }]))
+      saisies: Object.fromEntries(salaries.map(s=>{
+        const jours=joursBase.map(j=>{
+          const hRef = s.id===7 ? 7 : hStd(j.dateStr);
+          // Pré-saisie : heures remplies mais pas validées (grisé)
+          const heures = j.ferie ? String(hRef) : String(hRef);
+          const valide = !!j.ferie; // jours fériés sont auto-validés
+          return {...j, heures, valide, presaisie: !j.ferie};
+        });
+        return [s.id, {jours, absences:[], primes:[]}];
+      }))
     };
     setSemaines(p=>[...p,sem].sort((a,b)=>a.annee!==b.annee?a.annee-b.annee:a.numSem-b.numSem));
     setSemId(sem.id);
@@ -618,7 +624,18 @@ export default function App() {
                     <thead>
                       <tr>
                         <th style={CSS.jth}>Jour</th>
-                        <th style={CSS.jth}>Heures</th>
+                        <th style={CSS.jth}>
+                          <div style={{display:"flex",alignItems:"center",gap:6,justifyContent:"center"}}>
+                            Heures
+                            <button title="Valider toutes les heures pré-saisies"
+                              style={{fontSize:9,padding:"1px 6px",borderRadius:4,border:"1px solid #27ae60",background:"#f0fff4",color:"#27ae60",cursor:"pointer",fontWeight:700}}
+                              onClick={()=>{
+                                saisieAct.jours.forEach((_,i)=>{
+                                  if(!saisieAct.jours[i].valide) validerHeures(semId,salId,i);
+                                });
+                              }}>✓ tout</button>
+                          </div>
+                        </th>
                         <th style={CSS.jth}>Chantier</th>
                         <th style={CSS.jth}>Zone</th>
                         <th style={CSS.jth}>🚐</th>
@@ -627,10 +644,16 @@ export default function App() {
                     </thead>
                     <tbody>
                       {saisieAct.jours.map((j,i)=>{
-                        const bg=j.ferie?"#fffbea":j.valide&&parseFloat(j.heures)<hStd(j.dateStr)?"#fdf0ff":j.valide?"#f0fff4":"#fff";
-                        const hRef=hStd(j.dateStr);
-                        // Présaisie : gris si pas encore validé
-                        const hDisplay = j.heures !== "" ? j.heures : (sal.id===7 ? "7" : String(hRef));
+                        const hRef = sal.id===7 ? 7 : hStd(j.dateStr);
+                        const estPresaisie = j.presaisie && !j.valide;
+                        const estValide = j.valide;
+                        const estAbsent = j.valide && parseFloat(j.heures) < hRef && !j.ferie;
+                        // Couleurs de fond
+                        const bg = j.ferie ? "#fffbea"
+                                 : estAbsent ? "#fdf0ff"
+                                 : estValide ? "#f0fff4"
+                                 : estPresaisie ? "#f8f9fa"  // gris très léger = pré-saisie
+                                 : "#fff";
                         return(
                           <tr key={i} style={{background:bg}}>
                             <td style={CSS.jtd}>
@@ -640,17 +663,32 @@ export default function App() {
                             <td style={CSS.jtd}>
                               <div style={{display:"flex",gap:3,alignItems:"center"}}>
                                 <input type="number" min="0" max="12" step="0.5"
-                                  style={{...CSS.hInput,...(!j.valide?{color:"#bbb"}:{fontWeight:700,color:"#1a3a5c"})}}
-                                  value={hDisplay}
-                                  onChange={e=>{updateJour(semId,salId,i,"heures",e.target.value);updateJour(semId,salId,i,"valide",false);}}
-                                  onBlur={()=>{
-                                    // Si vide, pré-remplir
-                                    if(j.heures===""){
-                                      updateJour(semId,salId,i,"heures",sal.id===7?"7":String(hRef));
-                                    }
-                                    validerHeures(semId,salId,i);
-                                  }}/>
+                                  style={{
+                                    ...CSS.hInput,
+                                    // Pré-saisie = gris clair, validé = bleu foncé gras, absent = violet
+                                    color: estPresaisie ? "#bbb" : estAbsent ? "#8e44ad" : "#1a3a5c",
+                                    fontWeight: estValide ? 700 : 400,
+                                    background: estPresaisie ? "#f0f0f0" : "#fff",
+                                    border: estPresaisie ? "1.5px dashed #ccc" : estValide ? "1.5px solid #27ae60" : "1.5px solid #d5dde8",
+                                  }}
+                                  value={j.heures}
+                                  onChange={e=>{
+                                    updateJour(semId,salId,i,"heures",e.target.value);
+                                    updateJour(semId,salId,i,"valide",false);
+                                    updateJour(semId,salId,i,"presaisie",false);
+                                  }}
+                                  onBlur={()=>validerHeures(semId,salId,i)}/>
                                 <span style={{fontSize:9,color:"#aaa"}}>/{hRef}</span>
+                                {/* Bouton validation individuelle */}
+                                {!j.valide&&!j.ferie&&(
+                                  <button
+                                    title="Valider ces heures"
+                                    style={{fontSize:10,width:18,height:18,borderRadius:"50%",border:"1.5px solid #27ae60",background:"#fff",color:"#27ae60",cursor:"pointer",fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}
+                                    onClick={()=>validerHeures(semId,salId,i)}>✓</button>
+                                )}
+                                {j.valide&&!j.ferie&&(
+                                  <span style={{fontSize:10,color:"#27ae60",fontWeight:900}} title="Validé — cliquer dans le champ pour modifier">✓</span>
+                                )}
                               </div>
                             </td>
                             <td style={CSS.jtd}>
