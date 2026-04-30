@@ -395,12 +395,12 @@ export default function App() {
       saisies: Object.fromEntries(salaries.map(s=>{
         const jours=joursBase.map(j=>{
           const hRef = s.id===7 ? 7 : hStd(j.dateStr);
-          return {
-            ...j,
-            heures: String(hRef),  // pré-rempli
-            valide: !!j.ferie,     // jours fériés validés auto, les autres attendent le clic OK
-            presaisie: true
-          };
+          if(j.ferie){
+            // Jour férié : 0h travaillé par défaut, absence = heures de référence
+            return {...j, heures:"0", valide:true, absHeures:String(hRef), motifAbs:"Jour férié", presaisie:false};
+          }
+          // Jour normal : heures pré-remplies, pas encore validées
+          return {...j, heures:String(hRef), valide:false, absHeures:"", motifAbs:"", presaisie:true};
         });
         return [s.id, {jours, absences:[], primes:[]}];
       }))
@@ -438,9 +438,25 @@ export default function App() {
     const h=parseFloat(jour.heures)||0;
     const ref=salaire.id===7?7:hStd(jour.dateStr);
 
-    // Jour férié → validé automatiquement
+    // Jour férié → 0h par défaut, mais si on saisit des heures c'est exceptionnel
     if(jour.ferie){
-      updateJour(semId,salId,jourIdx,"valide",true);
+      if(h===0){
+        // Cas normal : pas travaillé, absence = heures de référence
+        setSemaines(p=>p.map(s=>{
+          if(s.id!==semId)return s;
+          const sa=s.saisies[salId];
+          const jours=sa.jours.map((jj,ii)=>ii===jourIdx?{...jj,valide:true,absHeures:String(ref),motifAbs:"Jour férié"}:jj);
+          return{...s,saisies:{...s.saisies,[salId]:{...sa,jours}}};
+        }));
+      } else {
+        // Exceptionnel : travail un jour férié, pas d'absence
+        setSemaines(p=>p.map(s=>{
+          if(s.id!==semId)return s;
+          const sa=s.saisies[salId];
+          const jours=sa.jours.map((jj,ii)=>ii===jourIdx?{...jj,valide:true,absHeures:"",motifAbs:""}:jj);
+          return{...s,saisies:{...s.saisies,[salId]:{...sa,jours}}};
+        }));
+      }
       return;
     }
 
@@ -747,9 +763,11 @@ export default function App() {
                         const hRef = sal.id===7 ? 7 : hStd(j.dateStr);
                         const estPresaisie = !j.valide && !j.ferie;
                         const estAbsent    = j.valide && parseFloat(j.heures) < hRef && !j.ferie && j.chantier!=="CFA";
-                        const bg = j.ferie      ? "#fffbea"
-                                 : estAbsent    ? "#fdf0ff"
-                                 : j.valide     ? "#f0fff4"
+                        const estFerieNonTravaille = j.ferie && parseFloat(j.heures)===0;
+                        const bg = estFerieNonTravaille ? "#fffbea"
+                                 : j.ferie              ? "#fff8dc"  // férié mais travaillé
+                                 : estAbsent            ? "#fdf0ff"
+                                 : j.valide             ? "#f0fff4"
                                  : "#f8f9fa";
                         return(
                           <tr key={i} style={{background:bg}}>
@@ -825,7 +843,7 @@ export default function App() {
                                 {j.chantier&&j.chantier!=="CFA"&&(
                                   <span style={{fontSize:9,color:"#27ae60",fontWeight:700}}>✓</span>
                                 )}
-                                {!j.chantier&&!j.ferie&&j.valide&&(
+                                {!j.chantier&&j.valide&&parseFloat(j.heures)>0&&(
                                   <span style={{fontSize:9,color:"#e67e22"}} title="Chantier non renseigné">⚠</span>
                                 )}
                               </div>
