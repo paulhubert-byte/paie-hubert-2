@@ -469,204 +469,225 @@ export default function App() {
       {/* ══ SAISIE ══ */}
       {vue==="saisie"&&(
         <div style={CSS.body}>
-          {/* Ajout semaine */}
-          <div style={CSS.card}>
-            <div style={CSS.cardTitle}>Ajouter une semaine</div>
-            <div style={CSS.row}>
-              <div style={CSS.field}>
-                <label style={CSS.label}>N° semaine</label>
-                <input type="number" min="1" max="53" style={CSS.input} value={newSem.num}
-                  onChange={e=>setNewSem(p=>({...p,num:+e.target.value}))}/>
+          <div style={CSS.saisieLayout}>
+
+            {/* COLONNE 1 : Semaines */}
+            <div style={CSS.col1}>
+              <div style={CSS.col1Title}>Semaines — {MOIS[mois-1]} {annee}</div>
+              <div style={CSS.semAddBox}>
+                <div style={{display:"flex",gap:4,alignItems:"center"}}>
+                  <div style={CSS.field}>
+                    <label style={CSS.label}>Sem.</label>
+                    <input type="number" min="1" max="53" style={{...CSS.input,width:46}} value={newSem.num}
+                      onChange={e=>setNewSem(p=>({...p,num:+e.target.value}))}/>
+                  </div>
+                  <div style={CSS.field}>
+                    <label style={CSS.label}>Année</label>
+                    <select style={{...CSS.input,width:68}} value={newSem.annee} onChange={e=>setNewSem(p=>({...p,annee:+e.target.value}))}>
+                      {[2025,2026,2027,2028].map(a=><option key={a}>{a}</option>)}
+                    </select>
+                  </div>
+                  <button style={{...CSS.btnPrimary,marginTop:14}} onClick={ajouterSemaine}>+</button>
+                </div>
+                {newSem.num&&newSem.annee&&(()=>{
+                  const l=isoWeekToMonday(newSem.annee,newSem.num);
+                  return <div style={{fontSize:9,color:"#888",marginTop:3}}>{fmtJour(l)} → {fmtJour(addDays(l,4))}</div>;
+                })()}
               </div>
-              <div style={CSS.field}>
-                <label style={CSS.label}>Année</label>
-                <select style={CSS.input} value={newSem.annee} onChange={e=>setNewSem(p=>({...p,annee:+e.target.value}))}>
-                  {[2025,2026,2027,2028].map(a=><option key={a}>{a}</option>)}
-                </select>
+              <div style={CSS.semList}>
+                {semMois.length===0&&<div style={{fontSize:10,color:"#bbb",padding:6}}>Aucune semaine</div>}
+                {semMois.map(s=>(
+                  <button key={s.id}
+                    style={{...CSS.semBtn,...(semId===s.id?CSS.semBtnOn:{})}}
+                    onClick={()=>setSemId(s.id)}>
+                    <div style={{fontWeight:600}}>S{s.numSem}</div>
+                    <div style={{fontSize:9,opacity:.7}}>{fmtJour(new Date(s.lundi))}</div>
+                  </button>
+                ))}
               </div>
-              {newSem.num&&newSem.annee&&(()=>{
-                const l=isoWeekToMonday(newSem.annee,newSem.num);
-                return <span style={CSS.preview}>{fmtJour(l)} → {fmtJour(addDays(l,4))}</span>;
-              })()}
-              <button style={CSS.btnPrimary} onClick={ajouterSemaine}>+ Ajouter</button>
             </div>
-          </div>
 
-          {/* Semaines du mois */}
-          {semMois.length>0&&(
-            <div style={CSS.semBar}>
-              {semMois.map(s=>(
-                <button key={s.id}
-                  style={{...CSS.semBtn,...(semId===s.id?CSS.semBtnOn:{})}}
-                  onClick={()=>setSemId(s.id)}>
-                  S{s.numSem} · {fmtJour(new Date(s.lundi))}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {!semaine&&<Vide icone="📋" texte="Ajoutez une semaine pour commencer"/>}
-
-          {semaine&&(
-            <div style={CSS.grid2}>
-              {/* Sidebar salariés */}
-              <div style={CSS.sidebar}>
-                <div style={CSS.sideHead}>Salariés · S{semaine.numSem}</div>
-                {salaries.map(s=>{
+            {/* COLONNE 2 : Salariés */}
+            <div style={CSS.col2}>
+              <div style={CSS.col2Title}>Salariés</div>
+              <div style={CSS.salList}>
+                {!semaine&&<div style={{fontSize:10,color:"#bbb",padding:10}}>Sélectionnez une semaine</div>}
+                {semaine&&salaries.map(s=>{
                   const sai=semaine.saisies[s.id];
-                  const done=sai?.jours.every(j=>j.valide||j.ferie);
+                  const done=sai?.jours.every(j=>j.valide||!!j.ferie);
                   return(
                     <div key={s.id} style={{...CSS.salCard,...(salId===s.id?CSS.salOn:{})}}
                       onClick={()=>setSalId(s.id)}>
-                      <span style={{fontWeight:600,fontSize:13}}>{s.nom}</span>
-                      <span style={{fontSize:11,color:done?"#27ae60":"#aaa",marginLeft:"auto"}}>{done?"✓":"·"}</span>
+                      <div style={{flex:1}}>
+                        <div style={CSS.salNom}>{s.nom}</div>
+                        <div style={{fontSize:9,color:"#aaa"}}>{s.contrat} · {s.coef}</div>
+                      </div>
+                      <span style={CSS.salCheck}>{done?"✓":""}</span>
                     </div>
                   );
                 })}
               </div>
+            </div>
 
-              {/* Formulaire saisie */}
-              {sal&&saisieAct&&(
+            {/* COLONNE 3 : Formulaire */}
+            <div style={CSS.col3}>
+              {(!semaine||!sal||!saisieAct)&&<Vide icone="📋" texte="Sélectionnez une semaine et un salarié"/>}
+              {semaine&&sal&&saisieAct&&(
                 <div style={CSS.formCard}>
+                  {/* En-tête salarié */}
                   <div style={CSS.formHead}>
                     <div>
                       <div style={CSS.formNom}>{sal.nom}</div>
-                      <div style={CSS.formSub}>{sal.contrat} · Coef. {sal.coef}{sal.tauxH?` · ${sal.tauxH}€/h`:""}</div>
+                      <div style={CSS.formSub}>{sal.contrat} · Coef. {sal.coef}{sal.tauxH?` · ${sal.tauxH}€/h`:""} · S{semaine.numSem}</div>
                     </div>
                     {calcSem&&(
                       <div style={CSS.pills}>
-                        <Pill l="Total" v={calcSem.total.toFixed(2)+"h"} c="#1a3a5c"/>
-                        <Pill l="HS 25%" v={calcSem.hs25.toFixed(2)+"h"} c="#e67e22" dim={!calcSem.hs25}/>
-                        <Pill l="HS 50%" v={calcSem.hs50.toFixed(2)+"h"} c="#c0392b" dim={!calcSem.hs50}/>
-                        <Pill l="Abs." v={calcSem.absH.toFixed(2)+"h"} c="#8e44ad" dim={!calcSem.absH}/>
+                        <Pill l="Total" v={calcSem.total.toFixed(1)+"h"} c="#1a3a5c"/>
+                        <Pill l="HS 25%" v={calcSem.hs25.toFixed(1)+"h"} c="#e67e22" dim={!calcSem.hs25}/>
+                        <Pill l="HS 50%" v={calcSem.hs50.toFixed(1)+"h"} c="#c0392b" dim={!calcSem.hs50}/>
+                        <Pill l="Abs." v={calcSem.absH.toFixed(1)+"h"} c="#8e44ad" dim={!calcSem.absH}/>
                       </div>
                     )}
                   </div>
 
-                  {/* Grille jours */}
-                  <div style={{overflowX:"auto"}}>
-                    <table style={CSS.jtbl}>
-                      <thead>
-                        <tr>
-                          <th style={CSS.jth}>Jour</th>
-                          <th style={CSS.jth}>Heures</th>
-                          <th style={CSS.jth}>Chantier</th>
-                          <th style={CSS.jth}>Zone</th>
-                          <th style={CSS.jth} title="Véhicule entreprise">🚐</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {saisieAct.jours.map((j,i)=>{
-                          const bg=j.ferie?"#fff3cd":j.valide?"#f0fff4":"#fff";
-                          const hRef=hStd(j.dateStr);
-                          const h=parseFloat(j.heures)||0;
-                          const absManque=j.valide&&h<hRef&&!j.ferie;
-                          return(
-                            <tr key={i} style={{background:bg}}>
-                              <td style={CSS.jtd}>
-                                <div style={{fontWeight:600,fontSize:12}}>{fmtJour(new Date(j.dateStr))}</div>
-                                {j.ferie&&<div style={{fontSize:10,color:"#e67e22"}}>🗓 {j.ferie}</div>}
-                                {absManque&&<div style={{fontSize:10,color:"#8e44ad"}}>Abs: {j.absHeures}h — {j.motifAbs}</div>}
-                              </td>
-                              <td style={CSS.jtd}>
-                                <div style={{display:"flex",gap:4,alignItems:"center"}}>
-                                  <input type="number" min="0" max="12" step="0.5"
-                                    style={{...CSS.hInput,...(!j.valide?{color:"#aaa"}:{fontWeight:700,color:"#1a3a5c"})}}
-                                    value={j.heures}
-                                    onChange={e=>{updateJour(semId,salId,i,"heures",e.target.value);updateJour(semId,salId,i,"valide",false);}}
-                                    onBlur={()=>validerHeures(semId,salId,i)}/>
-                                  <span style={{fontSize:10,color:"#999"}}>/{hRef}h</span>
-                                </div>
-                              </td>
-                              <td style={CSS.jtd}>
-                                <select style={CSS.chSel} value={j.chantier||""}
-                                  onChange={e=>{
-                                    const v=e.target.value;
-                                    updateJour(semId,salId,i,"chantier",v);
-                                    if(v==="CFA"){updateJour(semId,salId,i,"zone",null);}
-                                    else{
-                                      const ch=chantiers.find(c=>c.id===v);
-                                      if(ch) updateJour(semId,salId,i,"zone",ch.zone);
-                                    }
-                                  }}>
-                                  <option value="">—</option>
-                                  <option value="CFA">CFA</option>
-                                  {chantiers.map(c=><option key={c.id} value={c.id}>{c.nom} (Z{c.zone})</option>)}
+                  {/* Table jours */}
+                  <table style={CSS.jtbl}>
+                    <thead>
+                      <tr>
+                        <th style={CSS.jth}>Jour</th>
+                        <th style={CSS.jth}>Heures</th>
+                        <th style={CSS.jth}>Chantier</th>
+                        <th style={CSS.jth}>Zone</th>
+                        <th style={CSS.jth}>🚐</th>
+                        <th style={CSS.jth}>Absence / Motif</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {saisieAct.jours.map((j,i)=>{
+                        const bg=j.ferie?"#fffbea":j.valide&&parseFloat(j.heures)<hStd(j.dateStr)?"#fdf0ff":j.valide?"#f0fff4":"#fff";
+                        const hRef=hStd(j.dateStr);
+                        const h=parseFloat(j.heures)||0;
+                        return(
+                          <tr key={i} style={{background:bg}}>
+                            <td style={CSS.jtd}>
+                              <div style={{fontWeight:600,fontSize:11}}>{fmtJour(new Date(j.dateStr))}</div>
+                              {j.ferie&&<div style={{fontSize:9,color:"#e67e22"}}>{j.ferie}</div>}
+                            </td>
+                            <td style={CSS.jtd}>
+                              <div style={{display:"flex",gap:3,alignItems:"center"}}>
+                                <input type="number" min="0" max="12" step="0.5"
+                                  style={{...CSS.hInput,...(!j.valide?{color:"#bbb"}:{fontWeight:700,color:"#1a3a5c"})}}
+                                  value={j.heures}
+                                  onChange={e=>{updateJour(semId,salId,i,"heures",e.target.value);updateJour(semId,salId,i,"valide",false);}}
+                                  onBlur={()=>validerHeures(semId,salId,i)}/>
+                                <span style={{fontSize:9,color:"#aaa"}}>/{hRef}</span>
+                              </div>
+                            </td>
+                            <td style={CSS.jtd}>
+                              <select style={CSS.chSel} value={j.chantier||""}
+                                onChange={e=>{
+                                  const v=e.target.value;
+                                  updateJour(semId,salId,i,"chantier",v);
+                                  if(v==="CFA") updateJour(semId,salId,i,"zone",null);
+                                  else{ const ch=chantiers.find(c=>c.id===v); if(ch) updateJour(semId,salId,i,"zone",ch.zone); }
+                                }}>
+                                <option value="">—</option>
+                                <option value="CFA">CFA</option>
+                                {chantiers.map(c=><option key={c.id} value={c.id}>{c.nom} Z{c.zone}</option>)}
+                              </select>
+                            </td>
+                            <td style={{...CSS.jtd,textAlign:"center"}}>
+                              {j.chantier&&j.chantier!=="CFA"&&(
+                                <select style={CSS.zSel} value={j.zone||""} onChange={e=>updateJour(semId,salId,i,"zone",+e.target.value)}>
+                                  {ZONES.map(z=><option key={z} value={z}>{z}</option>)}
                                 </select>
-                              </td>
-                              <td style={{...CSS.jtd,textAlign:"center"}}>
-                                {j.chantier&&j.chantier!=="CFA"&&(
-                                  <select style={{...CSS.chSel,width:50}} value={j.zone||""}
-                                    onChange={e=>updateJour(semId,salId,i,"zone",+e.target.value)}>
-                                    {ZONES.map(z=><option key={z} value={z}>{z}</option>)}
-                                  </select>
-                                )}
-                              </td>
-                              <td style={{...CSS.jtd,textAlign:"center"}}>
-                                {j.chantier&&j.chantier!=="CFA"&&(
-                                  <input type="checkbox" checked={j.vehEnt||false}
-                                    onChange={e=>updateJour(semId,salId,i,"vehEnt",e.target.checked)}/>
-                                )}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
+                              )}
+                            </td>
+                            <td style={{...CSS.jtd,textAlign:"center"}}>
+                              {j.chantier&&j.chantier!=="CFA"&&(
+                                <input type="checkbox" checked={j.vehEnt||false}
+                                  onChange={e=>updateJour(semId,salId,i,"vehEnt",e.target.checked)}/>
+                              )}
+                            </td>
+                            <td style={CSS.jtd}>
+                              {j.valide&&(j.absHeures||j.ferie)&&(
+                                <span style={{fontSize:10,color:"#8e44ad"}}>{j.absHeures}h — {j.motifAbs}</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
 
-                  {/* Primes */}
-                  <div style={{marginTop:14}}>
-                    <div style={CSS.secTitle}>💰 Primes</div>
-                    {(saisieAct.primes||[]).map((p,i)=>(
-                      <div key={i} style={CSS.primeRow}>
-                        <input style={CSS.input} type="number" placeholder="Montant €" value={p.montant||""}
-                          onChange={e=>{const pr=[...(saisieAct.primes||[])];pr[i]={...pr[i],montant:e.target.value};updateSaisie(semId,salId,"primes",pr);}}/>
-                        <input style={CSS.input} placeholder="Libellé" value={p.libelle||""}
-                          onChange={e=>{const pr=[...(saisieAct.primes||[])];pr[i]={...pr[i],libelle:e.target.value};updateSaisie(semId,salId,"primes",pr);}}/>
-                        <button style={CSS.btnDel} onClick={()=>updateSaisie(semId,salId,"primes",(saisieAct.primes||[]).filter((_,j)=>j!==i))}>✕</button>
+                  {/* Bas : primes + données mensuelles */}
+                  <div style={CSS.formBottom}>
+                    <div style={CSS.primeSection}>
+                      <div style={CSS.secTitle}>💰 Primes</div>
+                      {(saisieAct.primes||[]).map((p,i)=>(
+                        <div key={i} style={CSS.primeRow}>
+                          <input style={{...CSS.input,width:70}} type="number" placeholder="€" value={p.montant||""}
+                            onChange={e=>{const pr=[...(saisieAct.primes||[])];pr[i]={...pr[i],montant:e.target.value};updateSaisie(semId,salId,"primes",pr);}}/>
+                          <input style={{...CSS.input,flex:1}} placeholder="Libellé prime" value={p.libelle||""}
+                            onChange={e=>{const pr=[...(saisieAct.primes||[])];pr[i]={...pr[i],libelle:e.target.value};updateSaisie(semId,salId,"primes",pr);}}/>
+                          <button style={CSS.btnDel} onClick={()=>updateSaisie(semId,salId,"primes",(saisieAct.primes||[]).filter((_,j)=>j!==i))}>✕</button>
+                        </div>
+                      ))}
+                      <button style={CSS.btnAdd} onClick={()=>updateSaisie(semId,salId,"primes",[...(saisieAct.primes||[]),{montant:"",libelle:""}])}>+ Prime</button>
+                    </div>
+
+                    <div style={CSS.mensuelSection}>
+                      <div style={CSS.secTitle}>📌 Données mensuelles</div>
+                      <div style={CSS.mensuelRow}>
+                        <div style={CSS.field}>
+                          <label style={CSS.label}>Taux H (€)</label>
+                          <input type="number" style={{...CSS.input,width:70}} value={(extras[salId]||{}).tauxH??sal.tauxH??""}
+                            onChange={e=>setExtras(p=>({...p,[salId]:{...(p[salId]||{}),tauxH:e.target.value}}))}/>
+                        </div>
+                        <div style={CSS.field}>
+                          <label style={CSS.label}>Acompte (€)</label>
+                          <input type="number" style={{...CSS.input,width:70}} value={(extras[salId]||{}).acompte||""}
+                            onChange={e=>setExtras(p=>({...p,[salId]:{...(p[salId]||{}),acompte:e.target.value}}))}/>
+                        </div>
+                        <div style={CSS.field}>
+                          <label style={CSS.label}>Saisie arrêt</label>
+                          <input type="number" style={{...CSS.input,width:70}} value={(extras[salId]||{}).saisieArr||""}
+                            onChange={e=>setExtras(p=>({...p,[salId]:{...(p[salId]||{}),saisieArr:e.target.value}}))}/>
+                        </div>
+                        {sal.id===7&&(
+                          <div style={CSS.field}>
+                            <label style={CSS.label}>Frais pro (€)</label>
+                            <input type="number" style={{...CSS.input,width:70}} value={(extras[salId]||{}).fraisPro||""}
+                              onChange={e=>setExtras(p=>({...p,[salId]:{...(p[salId]||{}),fraisPro:e.target.value}}))}/>
+                          </div>
+                        )}
+                        <div style={{...CSS.field,flex:1}}>
+                          <label style={CSS.label}>Observations</label>
+                          <input style={{...CSS.input,width:"100%"}} value={(extras[salId]||{}).obs||""}
+                            onChange={e=>setExtras(p=>({...p,[salId]:{...(p[salId]||{}),obs:e.target.value}}))}/>
+                        </div>
                       </div>
-                    ))}
-                    <button style={CSS.btnAdd} onClick={()=>updateSaisie(semId,salId,"primes",[...(saisieAct.primes||[]),{montant:"",libelle:""}])}>+ Prime</button>
-                  </div>
-
-                  {/* Données mensuelles */}
-                  <div style={{marginTop:14}}>
-                    <div style={CSS.secTitle}>📌 Données mensuelles</div>
-                    <div style={CSS.row}>
-                      <F label="Taux H (€)" value={(extras[salId]||{}).tauxH??sal.tauxH??""} type="number"
-                        onChange={v=>setExtras(p=>({...p,[salId]:{...(p[salId]||{}),tauxH:v}}))}/>
-                      <F label="Acompte (€)" value={(extras[salId]||{}).acompte||""} type="number"
-                        onChange={v=>setExtras(p=>({...p,[salId]:{...(p[salId]||{}),acompte:v}}))}/>
-                      <F label="Saisie arrêt (€)" value={(extras[salId]||{}).saisieArr||""} type="number"
-                        onChange={v=>setExtras(p=>({...p,[salId]:{...(p[salId]||{}),saisieArr:v}}))}/>
-                      {sal.id===7&&(
-                        <F label="Frais pro (€)" value={(extras[salId]||{}).fraisPro||""} type="number"
-                          onChange={v=>setExtras(p=>({...p,[salId]:{...(p[salId]||{}),fraisPro:v}}))}/>
-                      )}
-                      <F label="Observations" value={(extras[salId]||{}).obs||""}
-                        onChange={v=>setExtras(p=>({...p,[salId]:{...(p[salId]||{}),obs:v}}))}/>
                     </div>
                   </div>
 
-                  {/* Nav salariés */}
+                  {/* Navigation salariés */}
                   <div style={CSS.navSal}>
                     {salaries.findIndex(s=>s.id===salId)>0&&(
                       <button style={CSS.btnSec} onClick={()=>setSalId(salaries[salaries.findIndex(s=>s.id===salId)-1].id)}>
-                        ← {salaries[salaries.findIndex(s=>s.id===salId)-1].nom}
+                        ← {salaries[salaries.findIndex(s=>s.id===salId)-1].nom.split(" ")[0]}
                       </button>
                     )}
                     <div/>
                     {salaries.findIndex(s=>s.id===salId)<salaries.length-1&&(
                       <button style={CSS.btnPrimary} onClick={()=>setSalId(salaries[salaries.findIndex(s=>s.id===salId)+1].id)}>
-                        {salaries[salaries.findIndex(s=>s.id===salId)+1].nom} →
+                        {salaries[salaries.findIndex(s=>s.id===salId)+1].nom.split(" ")[0]} →
                       </button>
                     )}
                   </div>
                 </div>
               )}
             </div>
-          )}
+          </div>
         </div>
       )}
 
@@ -823,9 +844,9 @@ export default function App() {
 // ─── Sous-composants ──────────────────────────────────────────────────────────
 function Pill({l,v,c,dim}){
   return(
-    <div style={{border:`2px solid ${c}`,borderRadius:8,padding:"3px 10px",textAlign:"center",opacity:dim?0.3:1}}>
-      <div style={{fontWeight:800,fontSize:15,color:c}}>{v}</div>
-      <div style={{fontSize:10,color:"#999"}}>{l}</div>
+    <div style={{border:`2px solid ${c}`,borderRadius:6,padding:"2px 8px",textAlign:"center",opacity:dim?0.3:1}}>
+      <div style={{fontWeight:800,fontSize:13,color:c}}>{v}</div>
+      <div style={{fontSize:9,color:"#999"}}>{l}</div>
     </div>
   );
 }
@@ -893,63 +914,110 @@ function AjoutSalarié({onAdd}){
 }
 function zoneColor(z){const c=["","#2ecc71","#27ae60","#f1c40f","#e67e22","#e74c3c","#9b59b6","#3498db","#1abc9c","#e91e63","#607d8b"];return c[z]||"#999";}
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
+// ─── Styles ── Layout fixe 100vh, zéro scroll ─────────────────────────────────
 const CSS={
-  root:{fontFamily:"'Segoe UI',system-ui,sans-serif",minHeight:"100vh",background:"#eef1f6",color:"#1a1a2e"},
-  header:{background:"linear-gradient(135deg,#1a3a5c,#0d2137)",color:"#fff",padding:"14px 28px",display:"flex",alignItems:"center",justifyContent:"space-between",boxShadow:"0 3px 12px rgba(0,0,0,.25)"},
-  headerL:{display:"flex",alignItems:"center",gap:14},
-  logo:{width:44,height:44,borderRadius:11,background:"#e8a020",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:900,fontSize:24,color:"#fff"},
-  htitle:{fontWeight:700,fontSize:18,letterSpacing:.5},
-  hsub:{fontSize:11,opacity:.6,marginTop:2},
-  headerR:{display:"flex",gap:8,alignItems:"center"},
-  syncBadge:{fontSize:12,color:"rgba(255,255,255,.7)",padding:"3px 8px",background:"rgba(255,255,255,.15)",borderRadius:6},
-  hsel:{padding:"6px 10px",borderRadius:7,border:"1px solid rgba(255,255,255,.25)",background:"rgba(255,255,255,.12)",color:"#fff",fontSize:14,cursor:"pointer"},
-  nav:{background:"#fff",borderBottom:"2px solid #e0e6f0",padding:"0 28px",display:"flex"},
-  navBtn:{padding:"12px 20px",border:"none",background:"transparent",fontSize:14,cursor:"pointer",color:"#666",fontWeight:500,borderBottom:"3px solid transparent",marginBottom:-2},
+  // Layout global : colonne verticale, hauteur fixe
+  root:{fontFamily:"'Segoe UI',system-ui,sans-serif",height:"100vh",display:"flex",flexDirection:"column",background:"#eef1f6",color:"#1a1a2e",overflow:"hidden"},
+
+  // Header compact
+  header:{background:"linear-gradient(135deg,#1a3a5c,#0d2137)",color:"#fff",padding:"6px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0,height:44},
+  headerL:{display:"flex",alignItems:"center",gap:10},
+  logo:{width:28,height:28,borderRadius:7,background:"#e8a020",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:900,fontSize:15,color:"#fff"},
+  htitle:{fontWeight:700,fontSize:14,letterSpacing:.3},
+  hsub:{fontSize:10,opacity:.6,marginLeft:6},
+  headerR:{display:"flex",gap:6,alignItems:"center"},
+  syncBadge:{fontSize:11,color:"rgba(255,255,255,.7)",padding:"2px 7px",background:"rgba(255,255,255,.15)",borderRadius:5},
+  hsel:{padding:"3px 7px",borderRadius:5,border:"1px solid rgba(255,255,255,.25)",background:"rgba(255,255,255,.12)",color:"#fff",fontSize:12,cursor:"pointer"},
+
+  // Barre de nav horizontale compacte
+  nav:{background:"#fff",borderBottom:"2px solid #e0e6f0",padding:"0 16px",display:"flex",flexShrink:0},
+  navBtn:{padding:"6px 14px",border:"none",background:"transparent",fontSize:12,cursor:"pointer",color:"#666",fontWeight:500,borderBottom:"2px solid transparent",marginBottom:-2},
   navOn:{color:"#1a3a5c",borderBottomColor:"#e8a020",fontWeight:700},
-  toast:{background:"#27ae60",color:"#fff",textAlign:"center",padding:"8px",fontSize:14,fontWeight:600},
+
+  // Toast
+  toast:{background:"#27ae60",color:"#fff",textAlign:"center",padding:"5px",fontSize:12,fontWeight:600,flexShrink:0},
   toastErr:{background:"#e74c3c"},
-  body:{padding:"20px 28px",maxWidth:1400,margin:"0 auto"},
-  card:{background:"#fff",borderRadius:12,boxShadow:"0 1px 5px rgba(0,0,0,.08)",padding:20,marginBottom:16},
-  cardTitle:{fontWeight:700,fontSize:15,color:"#1a3a5c",marginBottom:14},
-  row:{display:"flex",gap:12,alignItems:"flex-end",flexWrap:"wrap"},
-  field:{display:"flex",flexDirection:"column",gap:4},
-  label:{fontSize:11,fontWeight:600,color:"#666"},
-  input:{padding:"8px 10px",borderRadius:7,border:"1.5px solid #d5dde8",fontSize:14,outline:"none"},
-  preview:{fontSize:12,color:"#888",fontStyle:"italic",alignSelf:"center"},
-  btnPrimary:{padding:"9px 18px",borderRadius:8,background:"#1a3a5c",border:"none",color:"#fff",fontWeight:700,fontSize:14,cursor:"pointer"},
-  btnSec:{padding:"9px 18px",borderRadius:8,border:"2px solid #c5d3e8",background:"#fff",color:"#555",fontWeight:600,fontSize:13,cursor:"pointer"},
-  btnExp:{padding:"10px 22px",borderRadius:9,background:"#e8a020",border:"none",color:"#fff",fontWeight:700,fontSize:14,cursor:"pointer"},
-  btnAdd:{padding:"7px 14px",borderRadius:7,border:"2px dashed #e8a020",background:"#fff8ee",color:"#c07010",fontWeight:600,cursor:"pointer",fontSize:13},
-  btnDel:{padding:"6px 10px",borderRadius:6,border:"1px solid #e74c3c",background:"#fff",color:"#e74c3c",cursor:"pointer",fontSize:14},
-  btnDelSm:{padding:"3px 10px",borderRadius:5,border:"1px solid #e74c3c",background:"#fff",color:"#e74c3c",cursor:"pointer",fontSize:11,marginTop:8},
-  semBar:{display:"flex",gap:8,flexWrap:"wrap",marginBottom:16},
-  semBtn:{padding:"7px 16px",borderRadius:20,border:"2px solid #c5d3e8",background:"#fff",cursor:"pointer",fontSize:13,fontWeight:500,color:"#555"},
+
+  // Zone de contenu : flex grow, overflow hidden
+  body:{flex:1,overflow:"hidden",padding:"8px 12px",display:"flex",flexDirection:"column",gap:6},
+
+  // Layout saisie : 3 colonnes fixes
+  saisieLayout:{flex:1,display:"grid",gridTemplateColumns:"160px 180px 1fr",gap:8,overflow:"hidden",minHeight:0},
+
+  // Colonne 1 : semaines
+  col1:{display:"flex",flexDirection:"column",gap:4,overflow:"hidden"},
+  col1Title:{fontSize:10,fontWeight:700,color:"#1a3a5c",textTransform:"uppercase",letterSpacing:.5,padding:"0 2px"},
+  semAddBox:{background:"#fff",borderRadius:8,padding:"8px 10px",boxShadow:"0 1px 3px rgba(0,0,0,.08)"},
+  semAddRow:{display:"flex",gap:4,marginTop:4},
+  semList:{flex:1,overflowY:"auto",display:"flex",flexDirection:"column",gap:3},
+  semBtn:{padding:"5px 10px",borderRadius:7,border:"1.5px solid #c5d3e8",background:"#fff",cursor:"pointer",fontSize:11,fontWeight:500,color:"#555",textAlign:"left"},
   semBtnOn:{background:"#1a3a5c",color:"#fff",borderColor:"#1a3a5c"},
-  grid2:{display:"grid",gridTemplateColumns:"200px 1fr",gap:16,alignItems:"start"},
-  sidebar:{background:"#fff",borderRadius:12,overflow:"hidden",boxShadow:"0 1px 5px rgba(0,0,0,.08)"},
-  sideHead:{background:"#1a3a5c",color:"#fff",padding:"12px 14px",fontWeight:700,fontSize:13},
-  salCard:{padding:"10px 14px",borderBottom:"1px solid #f0f3f8",cursor:"pointer",display:"flex",alignItems:"center"},
+
+  // Colonne 2 : salariés
+  col2:{display:"flex",flexDirection:"column",gap:4,overflow:"hidden"},
+  col2Title:{fontSize:10,fontWeight:700,color:"#1a3a5c",textTransform:"uppercase",letterSpacing:.5,padding:"0 2px"},
+  salList:{flex:1,overflowY:"auto",background:"#fff",borderRadius:8,boxShadow:"0 1px 3px rgba(0,0,0,.08)",overflow:"hidden"},
+  salCard:{padding:"7px 10px",borderBottom:"1px solid #f0f3f8",cursor:"pointer",display:"flex",alignItems:"center",gap:6},
   salOn:{background:"#eef4ff",borderLeft:"3px solid #1a3a5c"},
-  formCard:{background:"#fff",borderRadius:12,boxShadow:"0 1px 5px rgba(0,0,0,.08)",padding:22},
-  formHead:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:18,borderBottom:"2px solid #e8a020",paddingBottom:12},
-  formNom:{fontWeight:700,fontSize:16,color:"#1a3a5c"},
-  formSub:{fontSize:12,color:"#aaa",marginTop:2},
-  pills:{display:"flex",gap:8},
-  jtbl:{width:"100%",borderCollapse:"collapse",fontSize:13},
-  jth:{background:"#f0f4fa",padding:"8px 10px",fontWeight:700,fontSize:11,color:"#555",textAlign:"center",borderBottom:"2px solid #dde5f0",whiteSpace:"nowrap"},
-  jtd:{padding:"8px 10px",borderBottom:"1px solid #f0f3f8",verticalAlign:"middle"},
-  hInput:{width:65,padding:"5px 7px",borderRadius:6,border:"1.5px solid #d5dde8",fontSize:14,textAlign:"center",outline:"none"},
-  chSel:{padding:"5px 7px",borderRadius:6,border:"1.5px solid #d5dde8",fontSize:12,background:"#fff",maxWidth:180},
-  secTitle:{fontSize:11,fontWeight:700,color:"#1a3a5c",textTransform:"uppercase",letterSpacing:.8,marginBottom:10},
-  primeRow:{display:"flex",gap:8,marginBottom:8,alignItems:"center"},
-  navSal:{display:"flex",justifyContent:"space-between",marginTop:18,paddingTop:14,borderTop:"1px solid #f0f3f8"},
-  recapBar:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18},
-  bigTitle:{fontSize:18,fontWeight:700,color:"#1a3a5c"},
-  rtbl:{width:"100%",borderCollapse:"collapse",background:"#fff",borderRadius:11,overflow:"hidden",boxShadow:"0 1px 5px rgba(0,0,0,.08)",fontSize:13},
-  rth:{background:"#1a3a5c",color:"#fff",padding:"10px 8px",fontWeight:600,textAlign:"center",fontSize:11,whiteSpace:"nowrap"},
-  rtd:{padding:"9px 8px",textAlign:"center",borderBottom:"1px solid #f0f3f8"},
-  chGrid:{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:12,marginTop:12},
-  chCard:{background:"#fff",borderRadius:10,padding:14,boxShadow:"0 1px 4px rgba(0,0,0,.08)"},
-  zoneBadge:{color:"#fff",fontWeight:700,fontSize:12,padding:"2px 9px",borderRadius:20},
+  salNom:{fontWeight:600,fontSize:11,flex:1},
+  salCheck:{fontSize:12,color:"#27ae60"},
+
+  // Colonne 3 : formulaire saisie
+  col3:{display:"flex",flexDirection:"column",gap:6,overflow:"hidden"},
+  formCard:{background:"#fff",borderRadius:8,boxShadow:"0 1px 4px rgba(0,0,0,.08)",padding:"10px 14px",flex:1,display:"flex",flexDirection:"column",overflow:"hidden"},
+  formHead:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8,paddingBottom:7,borderBottom:"2px solid #e8a020",flexShrink:0},
+  formNom:{fontWeight:700,fontSize:14,color:"#1a3a5c"},
+  formSub:{fontSize:10,color:"#aaa",marginTop:1},
+  pills:{display:"flex",gap:6},
+
+  // Table jours : compact
+  jtbl:{width:"100%",borderCollapse:"collapse",fontSize:11},
+  jth:{background:"#f0f4fa",padding:"4px 6px",fontWeight:700,fontSize:10,color:"#555",textAlign:"center",borderBottom:"1px solid #dde5f0",whiteSpace:"nowrap"},
+  jtd:{padding:"4px 6px",borderBottom:"1px solid #f5f7fa",verticalAlign:"middle"},
+  hInput:{width:52,padding:"3px 5px",borderRadius:5,border:"1.5px solid #d5dde8",fontSize:12,textAlign:"center",outline:"none"},
+  chSel:{padding:"3px 5px",borderRadius:5,border:"1.5px solid #d5dde8",fontSize:11,background:"#fff",maxWidth:160},
+  zSel:{padding:"3px 4px",borderRadius:5,border:"1.5px solid #d5dde8",fontSize:11,background:"#fff",width:44},
+
+  // Bas du formulaire : primes + données mensuelles sur une ligne
+  formBottom:{display:"flex",gap:10,flexShrink:0,marginTop:6,alignItems:"flex-start"},
+  primeSection:{flex:1},
+  mensuelSection:{flex:1},
+  secTitle:{fontSize:10,fontWeight:700,color:"#1a3a5c",textTransform:"uppercase",letterSpacing:.5,marginBottom:4},
+  primeRow:{display:"flex",gap:5,marginBottom:4,alignItems:"center"},
+  mensuelRow:{display:"flex",gap:6,flexWrap:"wrap"},
+
+  // Navigation salariés
+  navSal:{display:"flex",justifyContent:"space-between",marginTop:6,flexShrink:0},
+
+  // Inputs compacts
+  input:{padding:"4px 8px",borderRadius:6,border:"1.5px solid #d5dde8",fontSize:11,outline:"none"},
+  label:{fontSize:10,fontWeight:600,color:"#666"},
+  preview:{fontSize:10,color:"#888",fontStyle:"italic",alignSelf:"center"},
+
+  // Boutons compacts
+  btnPrimary:{padding:"5px 12px",borderRadius:6,background:"#1a3a5c",border:"none",color:"#fff",fontWeight:700,fontSize:11,cursor:"pointer"},
+  btnSec:{padding:"5px 12px",borderRadius:6,border:"1.5px solid #c5d3e8",background:"#fff",color:"#555",fontWeight:600,fontSize:11,cursor:"pointer"},
+  btnExp:{padding:"6px 16px",borderRadius:7,background:"#e8a020",border:"none",color:"#fff",fontWeight:700,fontSize:12,cursor:"pointer"},
+  btnAdd:{padding:"4px 10px",borderRadius:6,border:"1.5px dashed #e8a020",background:"#fff8ee",color:"#c07010",fontWeight:600,cursor:"pointer",fontSize:10},
+  btnDel:{padding:"3px 7px",borderRadius:5,border:"1px solid #e74c3c",background:"#fff",color:"#e74c3c",cursor:"pointer",fontSize:12},
+  btnDelSm:{padding:"2px 7px",borderRadius:4,border:"1px solid #e74c3c",background:"#fff",color:"#e74c3c",cursor:"pointer",fontSize:10},
+
+  // Récap
+  recapLayout:{flex:1,overflow:"auto"},
+  recapBar:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,flexShrink:0},
+  bigTitle:{fontSize:15,fontWeight:700,color:"#1a3a5c"},
+  rtbl:{width:"100%",borderCollapse:"collapse",background:"#fff",borderRadius:8,overflow:"hidden",boxShadow:"0 1px 4px rgba(0,0,0,.08)",fontSize:12},
+  rth:{background:"#1a3a5c",color:"#fff",padding:"7px 8px",fontWeight:600,textAlign:"center",fontSize:10,whiteSpace:"nowrap"},
+  rtd:{padding:"7px 8px",textAlign:"center",borderBottom:"1px solid #f0f3f8"},
+
+  // Chantiers
+  chGrid:{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:10,overflowY:"auto",flex:1},
+  chCard:{background:"#fff",borderRadius:8,padding:12,boxShadow:"0 1px 3px rgba(0,0,0,.08)"},
+  zoneBadge:{color:"#fff",fontWeight:700,fontSize:11,padding:"2px 8px",borderRadius:16},
+
+  // Salariés
+  row:{display:"flex",gap:8,alignItems:"flex-end",flexWrap:"wrap"},
+  field:{display:"flex",flexDirection:"column",gap:3},
+  card:{background:"#fff",borderRadius:8,padding:14,boxShadow:"0 1px 4px rgba(0,0,0,.08)",marginBottom:10},
+  cardTitle:{fontWeight:700,fontSize:13,color:"#1a3a5c",marginBottom:10},
 };
