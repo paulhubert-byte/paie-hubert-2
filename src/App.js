@@ -395,10 +395,12 @@ export default function App() {
       saisies: Object.fromEntries(salaries.map(s=>{
         const jours=joursBase.map(j=>{
           const hRef = s.id===7 ? 7 : hStd(j.dateStr);
-          // Pré-saisie : heures remplies mais pas validées (grisé)
-          const heures = j.ferie ? String(hRef) : String(hRef);
-          const valide = !!j.ferie; // jours fériés sont auto-validés
-          return {...j, heures, valide, presaisie: !j.ferie};
+          return {
+            ...j,
+            heures: String(hRef),  // pré-rempli
+            valide: !!j.ferie,     // jours fériés validés auto, les autres attendent le clic OK
+            presaisie: true
+          };
         });
         return [s.id, {jours, absences:[], primes:[]}];
       }))
