@@ -427,26 +427,74 @@ export default function App() {
     }));
   }
 
-  // Validation des heures d'un jour
+  // Validation des heures d'un jour — gère toutes les règles automatiquement
   function validerHeures(semId, salId, jourIdx){
     const sem=semaines.find(s=>s.id===semId);
     const saisie=sem?.saisies[salId];
     const jour=saisie?.jours[jourIdx];
-    if(!jour)return;
+    const salaire=salaries.find(s=>s.id===salId);
+    if(!jour||!salaire)return;
+
     const h=parseFloat(jour.heures)||0;
-    const ref=hStd(jour.dateStr);
+    const ref=salaire.id===7?7:hStd(jour.dateStr);
+
+    // Jour férié → validé automatiquement
     if(jour.ferie){
       updateJour(semId,salId,jourIdx,"valide",true);
-      updateJour(semId,salId,jourIdx,"absHeures",String(ref));
-      updateJour(semId,salId,jourIdx,"motifAbs","Jour férié");
       return;
     }
-    if(h<ref && h>=0){
-      const manquant=Math.round((ref-h)*100)/100;
-      setModalAbs({semId,salId,jourIdx,manquant,dateStr:jour.dateStr});
-    } else {
+
+    // CFA → validé, pas d'absence, pas de panier/trajet
+    if(jour.chantier==="CFA"){
       updateJour(semId,salId,jourIdx,"valide",true);
+      updateJour(semId,salId,jourIdx,"absHeures","");
+      updateJour(semId,salId,jourIdx,"motifAbs","");
+      return;
     }
+
+    // Si heures = référence → valide, supprime toute absence sur ce jour
+    if(Math.round(h*100)===Math.round(ref*100)){
+      setSemaines(p=>p.map(s=>{
+        if(s.id!==semId)return s;
+        const sa=s.saisies[salId];
+        const jours=sa.jours.map((j,i)=>i===jourIdx?{...j,valide:true,absHeures:"",motifAbs:""}:j);
+        // Supprimer aussi les absences liées à ce jour dans la liste
+        const absences=(sa.absences||[]).filter(a=>a.dateStr!==jour.dateStr);
+        return{...s,saisies:{...s.saisies,[salId]:{...sa,jours,absences}}};
+      }));
+      return;
+    }
+
+    // Si heures > référence → HS, valide sans absence
+    if(h>ref){
+      updateJour(semId,salId,jourIdx,"valide",true);
+      updateJour(semId,salId,jourIdx,"absHeures","");
+      updateJour(semId,salId,jourIdx,"motifAbs","");
+      return;
+    }
+
+    // Si heures < référence → vérifier si le total semaine atteint quand même 35h
+    // (ex: récup d'heures, décalage sur d'autres jours)
+    const totalSem = saisie.jours.reduce((acc,j,i)=>{
+      const hj = i===jourIdx ? h : (parseFloat(j.heures)||0);
+      return acc+(j.ferie?0:hj);
+    },0);
+
+    if(Math.round(totalSem*100)>=Math.round(H_SEM*100)){
+      // 35h atteintes sur la semaine → pas d'absence
+      setSemaines(p=>p.map(s=>{
+        if(s.id!==semId)return s;
+        const sa=s.saisies[salId];
+        const jours=sa.jours.map((j,i)=>i===jourIdx?{...j,valide:true,absHeures:"",motifAbs:""}:j);
+        const absences=(sa.absences||[]).filter(a=>a.dateStr!==jour.dateStr);
+        return{...s,saisies:{...s.saisies,[salId]:{...sa,jours,absences}}};
+      }));
+      return;
+    }
+
+    // Heures < référence ET total < 35h → demander motif d'absence
+    const manquant=Math.round((ref-h)*100)/100;
+    setModalAbs({semId,salId,jourIdx,manquant,dateStr:jour.dateStr,hRef:ref});
   }
 
   // ─── Géolocalisation chantier ─────────────────────────────────────────────
@@ -596,22 +644,30 @@ export default function App() {
                       <div style={{display:"flex",gap:6,alignItems:"center",background:"#f8fafc",borderRadius:7,padding:"4px 8px",border:"1px solid #e0e6f0"}}>
 
                         {/* Bouton 35h : remplit et valide toute la semaine */}
-                        <button
-                          title="Semaine complète à 35h — remplit et valide tous les jours"
-                          style={{fontSize:10,padding:"3px 8px",borderRadius:5,border:"1.5px solid #1a3a5c",background:"#1a3a5c",color:"#fff",cursor:"pointer",fontWeight:700}}
-                          onClick={()=>{
-                            setSemaines(p=>p.map(s=>{
-                              if(s.id!==semId)return s;
-                              const jours=s.saisies[salId].jours.map(j=>{
-                                if(j.ferie)return j;
-                                const hRef=sal.id===7?7:hStd(j.dateStr);
-                                return{...j,heures:String(hRef),valide:true,presaisie:false};
-                              });
-                              return{...s,saisies:{...s.saisies,[salId]:{...s.saisies[salId],jours}}};
-                            }));
-                          }}>
-                          ✓ 35h
-                        </button>
+                        {(()=>{
+                          const toutValide=saisieAct.jours.filter(j=>!j.ferie).every(j=>j.valide);
+                          return(
+                            <button
+                              title={toutValide?"Semaine validée à 35h":"Valider semaine complète 35h"}
+                              style={{fontSize:10,padding:"3px 8px",borderRadius:5,cursor:"pointer",fontWeight:700,
+                                border:`1.5px solid ${toutValide?"#27ae60":"#1a3a5c"}`,
+                                background:toutValide?"#27ae60":"#1a3a5c",color:"#fff"}}
+                              onClick={()=>{
+                                setSemaines(p=>p.map(s=>{
+                                  if(s.id!==semId)return s;
+                                  const jours=s.saisies[salId].jours.map(j=>{
+                                    if(j.ferie)return j;
+                                    const hRef=sal.id===7?7:hStd(j.dateStr);
+                                    return{...j,heures:String(hRef),valide:true,presaisie:false,absHeures:"",motifAbs:""};
+                                  });
+                                  // 35h validées → supprimer toutes les absences
+                                  return{...s,saisies:{...s.saisies,[salId]:{...s.saisies[salId],jours,absences:[]}}};
+                                }));
+                              }}>
+                              ✓ 35h
+                            </button>
+                          );
+                        })()}
 
                         {/* Veh entreprise toute la semaine — propre à chaque salarié */}
                         <label style={{fontSize:10,cursor:"pointer",display:"flex",alignItems:"center",gap:3}}>
@@ -690,11 +746,11 @@ export default function App() {
                       {saisieAct.jours.map((j,i)=>{
                         const hRef = sal.id===7 ? 7 : hStd(j.dateStr);
                         const estPresaisie = !j.valide && !j.ferie;
-                        const estAbsent    = j.valide && parseFloat(j.heures) < hRef && !j.ferie;
+                        const estAbsent    = j.valide && parseFloat(j.heures) < hRef && !j.ferie && j.chantier!=="CFA";
                         const bg = j.ferie      ? "#fffbea"
                                  : estAbsent    ? "#fdf0ff"
                                  : j.valide     ? "#f0fff4"
-                                 : "#f8f9fa";  // gris léger = pré-saisie non validée
+                                 : "#f8f9fa";
                         return(
                           <tr key={i} style={{background:bg}}>
                             <td style={CSS.jtd}>
@@ -707,7 +763,7 @@ export default function App() {
                                 {!j.ferie&&(
                                   <button
                                     onClick={()=>validerHeures(semId,salId,i)}
-                                    title={j.valide ? "Validé — recliquer pour dévalider" : `Valider ${hRef}h`}
+                                    title={j.valide ? "Validé" : `Valider ${hRef}h`}
                                     style={{
                                       width:32, height:24, borderRadius:5, cursor:"pointer",
                                       fontSize:10, fontWeight:700,
@@ -731,11 +787,15 @@ export default function App() {
                                   }}
                                   value={j.heures}
                                   onChange={e=>{
-                                    updateJour(semId,salId,i,"heures",e.target.value);
-                                    updateJour(semId,salId,i,"valide",false);
-                                    updateJour(semId,salId,i,"presaisie",false);
+                                    // Modifier les heures → invalide ce jour
+                                    setSemaines(p=>p.map(s=>{
+                                      if(s.id!==semId)return s;
+                                      const sa=s.saisies[salId];
+                                      const jours=sa.jours.map((jj,ii)=>ii===i?{...jj,heures:e.target.value,valide:false,presaisie:false}:jj);
+                                      return{...s,saisies:{...s.saisies,[salId]:{...sa,jours}}};
+                                    }));
                                   }}
-                                  onBlur={()=>{ if(parseFloat(j.heures)!==hRef) validerHeures(semId,salId,i); }}
+                                  onBlur={()=>validerHeures(semId,salId,i)}
                                 />
                                 <span style={{fontSize:9,color:"#bbb"}}>/{hRef}</span>
                               </div>
