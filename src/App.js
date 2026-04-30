@@ -424,22 +424,31 @@ export default function App() {
     if(!newCh.nom||!newCh.ville){toast_("Nom et ville requis",false);return;}
     setGeoLoading(true);
     try{
+      // Chercher d'abord avec nom + ville, sinon juste la ville
       const q=`${newCh.nom} ${newCh.ville} France`;
-      const res=await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=1&countrycodes=fr`,
+      const q2=`${newCh.ville} France`;
+      let res=await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=1&countrycodes=fr`,
         {headers:{"Accept-Language":"fr","User-Agent":"HubertPeinture/1.0"}});
-      const data=await res.json();
+      let data=await res.json();
+      // Si pas de résultat précis, chercher par ville uniquement
+      if(!data.length){
+        res=await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q2)}&limit=1&countrycodes=fr`,
+          {headers:{"Accept-Language":"fr","User-Agent":"HubertPeinture/1.0"}});
+        data=await res.json();
+      }
       if(!data.length)throw new Error();
       const lat=parseFloat(data[0].lat),lng=parseFloat(data[0].lon);
-      // Distance vol d'oiseau depuis dépôt (Amfreville-la-Mi-Voie)
-      const dLat=(lat-49.3569)*Math.PI/180,dLng=(lng-1.1019)*Math.PI/180;
-      const a=Math.sin(dLat/2)**2+Math.cos(49.3569*Math.PI/180)*Math.cos(lat*Math.PI/180)*Math.sin(dLng/2)**2;
+      // Coordonnées précises du dépôt : 1 Allée de la Batellerie, Amfreville-la-Mi-Voie
+      const DLAT=49.3614, DLNG=1.1069;
+      const dLat=(lat-DLAT)*Math.PI/180,dLng=(lng-DLNG)*Math.PI/180;
+      const a=Math.sin(dLat/2)**2+Math.cos(DLAT*Math.PI/180)*Math.cos(lat*Math.PI/180)*Math.sin(dLng/2)**2;
       const km=6371*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
       const zone=km<10?1:km<20?2:km<30?3:km<40?4:km<50?5:km<60?6:km<70?7:km<90?8:km<110?9:10;
-      const ch={id:Date.now().toString(),nom:newCh.nom,ville:newCh.ville,lat,lng,km:Math.round(km*10)/10,zone};
+      const ch={id:Date.now().toString(),nom:newCh.nom,ville:newCh.ville,lat,lng,km:Math.round(km*10)/10,zone,adresseGeo:data[0].display_name};
       setChantiers(p=>[...p,ch].sort((a,b)=>a.nom.localeCompare(b.nom)));
       setNewCh({nom:"",ville:""});
-      toast_(`✓ ${ch.nom} — Zone ${zone} (${ch.km} km)`);
-    }catch(e){toast_("Adresse introuvable",false);}
+      toast_(`✓ ${ch.nom} — Zone ${zone} (${ch.km} km à vol d'oiseau)`);
+    }catch(e){toast_("Adresse introuvable — vérifiez la ville",false);}
     setGeoLoading(false);
   }
 
@@ -854,13 +863,28 @@ export default function App() {
           <div style={CSS.chGrid}>
             {chantiers.map(c=>(
               <div key={c.id} style={CSS.chCard}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-                  <div style={{fontWeight:700,fontSize:14,color:"#1a3a5c"}}>{c.nom}</div>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:4}}>
+                  <div style={{fontWeight:700,fontSize:13,color:"#1a3a5c",flex:1,marginRight:6}}>{c.nom}</div>
                   <div style={{...CSS.zoneBadge,background:zoneColor(c.zone)}}>Z{c.zone}</div>
                 </div>
-                <div style={{fontSize:12,color:"#888",marginTop:4}}>{c.ville}</div>
-                <div style={{fontSize:12,color:"#3498db",marginTop:2}}>📏 {c.km} km</div>
-                <button style={CSS.btnDelSm} onClick={()=>setChantiers(p=>p.filter(x=>x.id!==c.id))}>Supprimer</button>
+                <div style={{fontSize:11,color:"#888"}}>{c.ville}</div>
+                <div style={{fontSize:11,color:"#3498db",marginTop:2}}>📏 {c.km} km à vol d'oiseau</div>
+                {c.adresseGeo&&(
+                  <div style={{fontSize:9,color:"#bbb",marginTop:2,fontStyle:"italic"}} title={c.adresseGeo}>
+                    📍 {c.adresseGeo.split(",").slice(0,2).join(",")}
+                  </div>
+                )}
+                {/* Correction manuelle de la zone */}
+                <div style={{display:"flex",alignItems:"center",gap:6,marginTop:8}}>
+                  <label style={{fontSize:10,color:"#666"}}>Corriger zone :</label>
+                  <select style={{...CSS.input,width:55,fontSize:11,padding:"2px 4px"}}
+                    value={c.zone}
+                    onChange={e=>setChantiers(p=>p.map(x=>x.id===c.id?{...x,zone:+e.target.value,zoneCorrigee:true}:x))}>
+                    {[1,2,3,4,5,6,7,8,9,10].map(z=><option key={z} value={z}>{z}</option>)}
+                  </select>
+                  {c.zoneCorrigee&&<span style={{fontSize:9,color:"#e67e22",fontWeight:700}}>modifiée</span>}
+                </div>
+                <button style={{...CSS.btnDelSm,marginTop:6}} onClick={()=>setChantiers(p=>p.filter(x=>x.id!==c.id))}>Supprimer</button>
               </div>
             ))}
           </div>
