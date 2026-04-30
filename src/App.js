@@ -594,20 +594,43 @@ export default function App() {
                     <div style={{display:"flex",gap:10,alignItems:"center"}}>
                       {/* Actions globales semaine */}
                       <div style={{display:"flex",gap:6,alignItems:"center",background:"#f8fafc",borderRadius:7,padding:"4px 8px",border:"1px solid #e0e6f0"}}>
-                        {/* Veh entreprise toute la semaine */}
+
+                        {/* Bouton 35h : remplit et valide toute la semaine */}
+                        <button
+                          title="Semaine complète à 35h — remplit et valide tous les jours"
+                          style={{fontSize:10,padding:"3px 8px",borderRadius:5,border:"1.5px solid #1a3a5c",background:"#1a3a5c",color:"#fff",cursor:"pointer",fontWeight:700}}
+                          onClick={()=>{
+                            setSemaines(p=>p.map(s=>{
+                              if(s.id!==semId)return s;
+                              const jours=s.saisies[salId].jours.map(j=>{
+                                if(j.ferie)return j;
+                                const hRef=sal.id===7?7:hStd(j.dateStr);
+                                return{...j,heures:String(hRef),valide:true,presaisie:false};
+                              });
+                              return{...s,saisies:{...s.saisies,[salId]:{...s.saisies[salId],jours}}};
+                            }));
+                          }}>
+                          ✓ 35h
+                        </button>
+
+                        {/* Veh entreprise toute la semaine — propre à chaque salarié */}
                         <label style={{fontSize:10,cursor:"pointer",display:"flex",alignItems:"center",gap:3}}>
                           <input type="checkbox"
-                            checked={saisieAct.jours.filter(j=>!j.ferie&&j.heures).every(j=>j.vehEnt)}
+                            checked={saisieAct.jours.filter(j=>!j.ferie&&parseFloat(j.heures)>0).length>0 &&
+                                     saisieAct.jours.filter(j=>!j.ferie&&parseFloat(j.heures)>0).every(j=>j.vehEnt)}
                             onChange={e=>{
                               const val=e.target.checked;
                               setSemaines(p=>p.map(s=>{
                                 if(s.id!==semId)return s;
-                                const jours=s.saisies[salId].jours.map(j=>(!j.ferie&&j.heures)?{...j,vehEnt:val}:j);
+                                const jours=s.saisies[salId].jours.map(j=>
+                                  (!j.ferie&&parseFloat(j.heures)>0)?{...j,vehEnt:val}:j
+                                );
                                 return{...s,saisies:{...s.saisies,[salId]:{...s.saisies[salId],jours}}};
                               }));
                             }}/>
                           🚐 sem.
                         </label>
+
                         {/* Motif absence toute la semaine */}
                         <select style={{...CSS.input,fontSize:10,padding:"2px 5px"}}
                           value=""
@@ -618,11 +641,10 @@ export default function App() {
                               if(s.id!==semId)return s;
                               const jours=s.saisies[salId].jours.map(j=>{
                                 if(j.ferie)return j;
-                                const hRef=hStd(j.dateStr);
+                                const hRef=sal.id===7?7:hStd(j.dateStr);
                                 return{...j,heures:"0",absHeures:String(hRef),motifAbs:motif,valide:true};
                               });
-                              // Ajouter absences consolidées
-                              const totalAbs=jours.reduce((acc,j)=>acc+(parseFloat(j.absHeures)||0),0);
+                              const totalAbs=jours.filter(j=>!j.ferie).reduce((acc,j)=>acc+(parseFloat(j.absHeures)||0),0);
                               const absences=[{heures:totalAbs,motif,dateStr:jours[0]?.dateStr,id:Date.now().toString()}];
                               return{...s,saisies:{...s.saisies,[salId]:{...s.saisies[salId],jours,absences}}};
                             }));
