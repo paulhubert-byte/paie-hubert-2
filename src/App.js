@@ -137,165 +137,187 @@ function calcMois(semaines, salId) {
 // ─── Génération Excel ─────────────────────────────────────────────────────────
 async function genererExcel(moisIdx, annee, semaines, salaries, chantiers, extras) {
   const XLSX = await import("https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs");
-  const wb = XLSX.utils.book_new();
+  const wb   = XLSX.utils.book_new();
   const moisNom = MOIS[moisIdx-1];
-
-  // Filtrer semaines du mois
   const semMois = semaines.filter(s=>s.mois===moisIdx&&s.annee===annee);
 
-  // ── Structure colonnes (fidèle au template) ──
-  // A=Nom B=Coef C=Abattement D=H E=HS25% F=HS50%
-  // G=AbsH H=AbsMotif I=AbsDates J=PrimeMontant K=PrimeLibellé
-  // L=PanierQté M..W=Trajet(1..10) X..AH=Transport(1..10)
-  // AI=Acompte AJ=Saisie AK=Observations
-  // Ligne 1: Nom + Contrat, Taux H en col B5
-  // 2 lignes par salarié
-
+  // Structure colonnes (35 colonnes A..AI) :
+  // A=Nom/Contrat  B=Coef/TauxH  C=Abattement
+  // D=H  E=HS25%  F=HS50%
+  // G=AbsHeures  H=AbsMotif  I=AbsDates
+  // J=PrimeMontant  K=PrimeLibellé
+  // L=PanierQté
+  // M..V  = Trajet zones 1..10  (col 12..21)
+  // W..AF = Transport zones 1..10 (col 22..31)
+  // AG=Acompte  AH=Saisie  AI=Observations
+  const NC = 35;
   const aoa = [];
   const merges = [];
-  const addM=(r,c,re,ce)=>merges.push({s:{r,c},e:{r:re,c:ce}});
+  const addM = (r,c,re,ce) => merges.push({s:{r,c},e:{r:re,c:ce}});
 
-  // Ligne 1
-  aoa.push(["Entreprise HUBERT",...Array(9).fill(null),moisNom,...Array(25).fill(null)]);
-  // Ligne 2 vide
-  aoa.push(Array(37).fill(null));
-  // Ligne 3 groupes
-  aoa.push(["SALARIÉ",null,"Abattement","TEMPS DE TRAVAIL",null,null,"ABSENCES",null,null,"PRIME",null,"Panier Repas","TRAJET",...Array(10).fill(null),"TRANSPORT",...Array(10).fill(null),"Acompte","Saisie","Observations"]);
-  // Ligne 4 sous-en-têtes
-  aoa.push([null,"Coef.",null,"H","HS 25 %","HS 50 %","nombre heures","motif","dates","Montant","Libellé",null,"Zone","Zone","Zone","Zone","Zone","Zone","Zone","Zone","Zone","Zone","Zone","Zone","Zone","Zone","Zone","Zone","Zone","Zone","Zone","Zone","Zone","Zone",null,null,null]);
-  // Ligne 5 zones
-  aoa.push([null,"Taux H",null,null,null,null,null,null,null,null,null,"Qté",1,2,3,4,5,6,7,8,9,10,1,2,3,4,5,6,7,8,9,10,null,null,null,null,null]);
+  // ── Ligne 1 : titre
+  const r1=Array(NC).fill(null);
+  r1[0]="Entreprise HUBERT PEINTURE";
+  r1[10]=`${moisNom}-${String(annee).slice(2)}`;
+  aoa.push(r1);
+
+  // ── Ligne 2 vide
+  aoa.push(Array(NC).fill(null));
+
+  // ── Ligne 3 : groupes
+  const r3=Array(NC).fill(null);
+  r3[0]="SALARIE"; r3[2]="Abattement";
+  r3[3]="TEMPS DE TRAVAIL"; r3[6]="ABSENCES"; r3[9]="PRIME";
+  r3[11]="Paniers\nrepas"; r3[12]="TRAJET"; r3[22]="TRANSPORT";
+  r3[32]="Acompte"; r3[33]="Saisie"; r3[34]="Observations";
+  aoa.push(r3);
+
+  // ── Ligne 4 : sous-en-têtes
+  const r4=Array(NC).fill(null);
+  r4[1]="Coef."; r4[3]="H"; r4[4]="HS 25 %"; r4[5]="HS 50 %";
+  r4[6]="nombre\nheures"; r4[7]="motif"; r4[8]="dates";
+  r4[9]="Montant"; r4[10]="Libellé";
+  for(let i=0;i<10;i++){r4[12+i]="Zone"; r4[22+i]="Zone";}
+  aoa.push(r4);
+
+  // ── Ligne 5 : taux H + numéros zones
+  const r5=Array(NC).fill(null);
+  r5[1]="Taux H"; r5[11]="Qté";
+  for(let i=0;i<10;i++){r5[12+i]=i+1; r5[22+i]=i+1;}
+  aoa.push(r5);
 
   // Merges en-têtes
-  addM(0,10,0,11); // mois K1:L1
-  addM(2,0,4,1);   // SALARIÉ A3:B5
-  addM(2,2,4,2);   // Abattement C3:C5
-  addM(2,3,2,5);   // TEMPS DE TRAVAIL D3:F3
-  addM(2,6,2,8);   // ABSENCES G3:I3
-  addM(2,9,2,10);  // PRIME J3:K3
-  addM(2,11,3,11); // Panier L3:L4
-  addM(2,12,2,22); // TRAJET M3:W3
-  addM(2,23,2,33); // TRANSPORT X3:AH3
-  addM(2,34,4,34); // Acompte
-  addM(2,35,4,35); // Saisie
-  addM(2,36,4,36); // Observations
-  addM(3,3,4,3);   // H
-  addM(3,4,4,4);   // HS25
-  addM(3,5,4,5);   // HS50
-  addM(3,6,4,6);   // AbsH
-  addM(3,7,4,7);   // motif
-  addM(3,8,4,8);   // dates
-  addM(3,9,4,9);   // Montant
-  addM(3,10,4,10); // Libellé
+  addM(0,0,0,9); addM(0,10,0,11);       // titre + mois
+  addM(2,0,4,1);                          // SALARIE A3:B5
+  addM(2,2,4,2);                          // Abattement C3:C5
+  addM(2,3,2,5);                          // TEMPS DE TRAVAIL D3:F3
+  addM(2,6,2,8);                          // ABSENCES G3:I3
+  addM(2,9,2,10);                         // PRIME J3:K3
+  addM(2,11,3,11);                        // Paniers L3:L4
+  addM(2,12,2,21);                        // TRAJET M3:V3
+  addM(2,22,2,31);                        // TRANSPORT W3:AF3
+  addM(2,32,4,32); addM(2,33,4,33); addM(2,34,4,34); // Acompte/Saisie/Obs
+  addM(3,3,4,3); addM(3,4,4,4); addM(3,5,4,5);
+  addM(3,6,4,6); addM(3,7,4,7); addM(3,8,4,8);
+  addM(3,9,4,9); addM(3,10,4,10);
 
-  // Données salariés
-  let dataRow = 5;
-  salaries.forEach((sal,si)=>{
-    const c = calcMois(semMois, sal.id);
+  // ── Données salariés
+  let dataRow = 5; // index 0-based dans aoa
+
+  salaries.forEach(sal=>{
+    const c  = calcMois(semMois, sal.id);
     const ex = extras[sal.id]||{};
-    const tauxH = ex.tauxH!==undefined ? ex.tauxH : sal.tauxH;
+    const tauxH = (ex.tauxH!==undefined&&ex.tauxH!=='') ? ex.tauxH : sal.tauxH;
 
     // Regrouper absences par motif
     const absMap={};
     c.absences.forEach(ab=>{
       const k=ab.motif||"Absence";
       if(!absMap[k]) absMap[k]={heures:0,dates:[]};
-      absMap[k].heures = Math.round((absMap[k].heures+(parseFloat(ab.heures)||0))*100)/100;
+      absMap[k].heures=Math.round((absMap[k].heures+(parseFloat(ab.heures)||0))*100)/100;
       if(ab.dateStr) absMap[k].dates.push(fmtDateFR(ab.dateStr));
     });
-    const absEntries=Object.entries(absMap);
-    const nbAbs=Math.max(1,absEntries.length);
-    const nbPrimes=Math.max(1,c.primes.length);
-    const nbRows=Math.max(nbAbs,nbPrimes,1);
+    const absEntries = Object.entries(absMap);
+    const nbAbs      = absEntries.length;
+    const nbPrimes   = c.primes.length;
+    // Nombre de lignes de données = max(1, nbAbs, nbPrimes)
+    // Ligne 1 = nom + 1ère absence + 1ère prime
+    // Ligne 2 = contrat/taux + données chiffrées
+    // Lignes 3+ = absences/primes supplémentaires
+    const nbSuppl = Math.max(0, nbAbs-1, nbPrimes-1);
+    const totalLignes = 2 + nbSuppl; // ligne nom + ligne données + lignes supp
 
-    // Ligne 1 salarié (nom, coef, abattement, HS, absences, primes, paniers, trajet, transport)
-    const row1 = Array(37).fill(null);
-    row1[0] = sal.nom;
-    row1[1] = sal.coef;
-    row1[2] = sal.abattement ? "OUI" : null;
-    // Absences ligne 1
+    // ── LIGNE NOM (row A)
+    const rowNom = Array(NC).fill(null);
+    rowNom[0] = sal.nom;
+    rowNom[1] = sal.coef!=="Cadre" ? sal.coef : null;
+    rowNom[2] = sal.abattement ? "/" : null; // barre diagonale = "/" visuellement
+    // 1ère absence
     if(absEntries.length>0){
-      const [motif,data]=absEntries[0];
-      row1[6]=Math.round(data.heures*100)/100;
-      row1[7]=motif;
-      if(data.dates.length===1) row1[8]=data.dates[0];
-      else if(data.dates.length>1) row1[8]=`${data.dates[0]} au ${data.dates[data.dates.length-1]}`;
+      const[m,d]=absEntries[0];
+      rowNom[6]=d.heures||null; rowNom[7]=m;
+      rowNom[8]=d.dates.length===1 ? d.dates[0]
+              : d.dates.length>1  ? `${d.dates[0]} au ${d.dates[d.dates.length-1]}`
+              : null;
     }
-    // Primes ligne 1
+    // 1ère prime
     if(c.primes.length>0){
-      row1[9]=c.primes[0].montant||null;
-      row1[10]=c.primes[0].libelle||null;
+      rowNom[9]=parseFloat(c.primes[0].montant)||null;
+      rowNom[10]=c.primes[0].libelle||null;
     }
-    aoa.push(row1);
+    aoa.push(rowNom);
 
-    // Ligne 2 salarié (contrat, taux H, H, HS25, HS50, paniers, trajet, transport, acompte, obs)
-    const row2 = Array(37).fill(null);
-    row2[0] = sal.contrat;
-    row2[1] = tauxH;
-    row2[3] = c.H;
-    row2[4] = c.hs25||null;
-    row2[5] = c.hs50||null;
-    row2[11] = c.paniers||null;
-    ZONES.forEach((z,i)=>{
-      row2[12+i] = c.trajet[z]||null;   // M..V (col 12..21)
-      row2[23+i] = c.transport[z]||null; // X..AG (col 23..32)
-    });
-    row2[34] = ex.acompte||null;
-    row2[35] = ex.saisieArr||null;
-    // Observations (frais pro Paul Hubert)
-    const obsParts=[];
-    if(ex.fraisPro) obsParts.push(`Frais pro: ${ex.fraisPro}€`);
-    if(ex.obs) obsParts.push(ex.obs);
-    row2[36] = obsParts.join(" | ")||null;
-    aoa.push(row2);
+    // ── LIGNE DONNÉES (row B)
+    const rowData = Array(NC).fill(null);
+    rowData[0] = sal.contrat;
+    rowData[1] = tauxH;
+    rowData[3] = c.H;
+    rowData[4] = c.hs25||null;
+    rowData[5] = c.hs50||null;
+    rowData[11]= c.paniers||null;
+    for(let i=0;i<10;i++){
+      rowData[12+i] = c.trajet[i+1]||null;
+      rowData[22+i] = c.transport[i+1]||null;
+    }
+    rowData[32] = ex.acompte||null;
+    rowData[33] = ex.saisieArr||null;
+    const obs=[];
+    if(ex.fraisPro) obs.push(`Rembt frais professionnels`);
+    if(ex.obs) obs.push(ex.obs);
+    rowData[34] = obs.join(" | ")||null;
+    aoa.push(rowData);
 
-    // Lignes supplémentaires (absences 2+, primes 2+)
-    for(let i=1;i<nbRows;i++){
-      const rowX = Array(37).fill(null);
-      if(i<absEntries.length){
-        const [motif,data]=absEntries[i];
-        rowX[6]=Math.round(data.heures*100)/100;
-        rowX[7]=motif;
-        if(data.dates.length===1) rowX[8]=data.dates[0];
-        else if(data.dates.length>1) rowX[8]=`${data.dates[0]} au ${data.dates[data.dates.length-1]}`;
+    // ── LIGNES SUPPLÉMENTAIRES (absences 2+, primes 2+)
+    for(let i=0;i<nbSuppl;i++){
+      const rowX = Array(NC).fill(null);
+      // Absence i+1
+      if(i+1<absEntries.length){
+        const[m,d]=absEntries[i+1];
+        rowX[6]=d.heures||null; rowX[7]=m;
+        rowX[8]=d.dates.length===1 ? d.dates[0]
+               : d.dates.length>1  ? `${d.dates[0]} au ${d.dates[d.dates.length-1]}`
+               : null;
       }
-      if(i<c.primes.length){
-        rowX[9]=c.primes[i].montant||null;
-        rowX[10]=c.primes[i].libelle||null;
+      // Prime i+1
+      if(i+1<c.primes.length){
+        rowX[9]=parseFloat(c.primes[i+1].montant)||null;
+        rowX[10]=c.primes[i+1].libelle||null;
       }
       aoa.push(rowX);
     }
 
-    // Merges pour ce salarié
-    const r1=dataRow, r2=dataRow+1, rEnd=dataRow+nbRows+1-1;
-    addM(r1,0,r1,0); // nom seul
-    if(rEnd>r2){
-      // Fusionner cols fixes sur lignes supp
-      [1,2,3,4,5,11,...Array(10).fill(0).map((_,i)=>12+i),...Array(10).fill(0).map((_,i)=>23+i),34,35,36].forEach(col=>{
-        if(rEnd>r2) addM(r2,col,rEnd,col);
-      });
-    }
-    // Merge abattement sur 3 lignes si pas de lignes supp
-    addM(r1,2,r2+(nbRows-1),2);
+    // ── Merges pour ce salarié
+    const rNom  = dataRow;
+    const rData = dataRow+1;
+    const rFin  = dataRow+totalLignes-1;
 
-    dataRow += 1+nbRows;
+    // Colonnes fixes fusionnées sur toutes les lignes du salarié
+    const colsFixes=[0,1,2,3,4,5,11,
+      ...Array(10).fill(0).map((_,i)=>12+i),  // trajet
+      ...Array(10).fill(0).map((_,i)=>22+i),  // transport
+      32,33,34];
+    colsFixes.forEach(col=>{
+      if(rFin>rNom) addM(rNom,col,rFin,col);
+    });
+
+    dataRow += totalLignes;
   });
 
   const ws = XLSX.utils.aoa_to_sheet(aoa);
   ws["!merges"] = merges;
 
-  // Largeurs colonnes
   ws["!cols"] = [
-    {wch:21.9},{wch:9.3},{wch:5.0},{wch:8.4},{wch:9.3},{wch:9.1},
+    {wch:21.9},{wch:9.3},{wch:4.5},{wch:8.4},{wch:9.3},{wch:9.1},
     {wch:10.9},{wch:16.1},{wch:20.9},{wch:12.4},{wch:19.7},{wch:11.7},
-    ...Array(10).fill({wch:6.7}), // trajet
-    ...Array(10).fill({wch:6.7}), // transport
+    ...Array(10).fill({wch:6.7}),  // trajet
+    ...Array(10).fill({wch:6.7}),  // transport
     {wch:12.9},{wch:9.0},{wch:34.9}
   ];
 
   XLSX.utils.book_append_sheet(wb, ws, moisNom);
   XLSX.writeFile(wb, `Saisie_EV_${moisNom}_${annee}.xlsx`);
 }
+
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // APP
@@ -625,15 +647,13 @@ export default function App() {
                       <tr>
                         <th style={CSS.jth}>Jour</th>
                         <th style={CSS.jth}>
-                          <div style={{display:"flex",alignItems:"center",gap:6,justifyContent:"center"}}>
+                          <div style={{display:"flex",alignItems:"center",gap:4,justifyContent:"center"}}>
                             Heures
-                            <button title="Valider toutes les heures pré-saisies"
-                              style={{fontSize:9,padding:"1px 6px",borderRadius:4,border:"1px solid #27ae60",background:"#f0fff4",color:"#27ae60",cursor:"pointer",fontWeight:700}}
-                              onClick={()=>{
-                                saisieAct.jours.forEach((_,i)=>{
-                                  if(!saisieAct.jours[i].valide) validerHeures(semId,salId,i);
-                                });
-                              }}>✓ tout</button>
+                            <button style={{fontSize:9,padding:"1px 5px",borderRadius:3,border:"1px solid #27ae60",background:"#f0fff4",color:"#27ae60",cursor:"pointer",fontWeight:700}}
+                              title="Valider toutes les heures pré-saisies"
+                              onClick={()=>saisieAct.jours.forEach((_,i)=>{ if(!saisieAct.jours[i].valide) validerHeures(semId,salId,i); })}>
+                              ✓ tout
+                            </button>
                           </div>
                         </th>
                         <th style={CSS.jth}>Chantier</th>
@@ -645,15 +665,12 @@ export default function App() {
                     <tbody>
                       {saisieAct.jours.map((j,i)=>{
                         const hRef = sal.id===7 ? 7 : hStd(j.dateStr);
-                        const estPresaisie = j.presaisie && !j.valide;
-                        const estValide = j.valide;
-                        const estAbsent = j.valide && parseFloat(j.heures) < hRef && !j.ferie;
-                        // Couleurs de fond
-                        const bg = j.ferie ? "#fffbea"
-                                 : estAbsent ? "#fdf0ff"
-                                 : estValide ? "#f0fff4"
-                                 : estPresaisie ? "#f8f9fa"  // gris très léger = pré-saisie
-                                 : "#fff";
+                        const estPresaisie = !j.valide && !j.ferie;
+                        const estAbsent    = j.valide && parseFloat(j.heures) < hRef && !j.ferie;
+                        const bg = j.ferie      ? "#fffbea"
+                                 : estAbsent    ? "#fdf0ff"
+                                 : j.valide     ? "#f0fff4"
+                                 : "#f8f9fa";  // gris léger = pré-saisie non validée
                         return(
                           <tr key={i} style={{background:bg}}>
                             <td style={CSS.jtd}>
@@ -661,15 +678,32 @@ export default function App() {
                               {j.ferie&&<div style={{fontSize:9,color:"#e67e22"}}>{j.ferie}</div>}
                             </td>
                             <td style={CSS.jtd}>
-                              <div style={{display:"flex",gap:3,alignItems:"center"}}>
+                              <div style={{display:"flex",gap:4,alignItems:"center"}}>
+                                {/* Bouton OK — valide les heures pré-saisies en 1 clic */}
+                                {!j.ferie&&(
+                                  <button
+                                    onClick={()=>validerHeures(semId,salId,i)}
+                                    title={j.valide ? "Validé — recliquer pour dévalider" : `Valider ${hRef}h`}
+                                    style={{
+                                      width:32, height:24, borderRadius:5, cursor:"pointer",
+                                      fontSize:10, fontWeight:700,
+                                      border: j.valide ? "1.5px solid #27ae60" : "1.5px solid #ccc",
+                                      background: j.valide ? "#27ae60" : "#f0f0f0",
+                                      color: j.valide ? "#fff" : "#999",
+                                      flexShrink:0,
+                                    }}>
+                                    {j.valide ? "✓" : "OK"}
+                                  </button>
+                                )}
                                 <input type="number" min="0" max="12" step="0.5"
                                   style={{
                                     ...CSS.hInput,
-                                    // Pré-saisie = gris clair, validé = bleu foncé gras, absent = violet
                                     color: estPresaisie ? "#bbb" : estAbsent ? "#8e44ad" : "#1a3a5c",
-                                    fontWeight: estValide ? 700 : 400,
-                                    background: estPresaisie ? "#f0f0f0" : "#fff",
-                                    border: estPresaisie ? "1.5px dashed #ccc" : estValide ? "1.5px solid #27ae60" : "1.5px solid #d5dde8",
+                                    fontWeight: j.valide ? 700 : 400,
+                                    background: estPresaisie ? "#efefef" : "#fff",
+                                    border: estPresaisie ? "1.5px dashed #ccc"
+                                          : j.valide     ? "1.5px solid #27ae60"
+                                          : "1.5px solid #d5dde8",
                                   }}
                                   value={j.heures}
                                   onChange={e=>{
@@ -677,18 +711,9 @@ export default function App() {
                                     updateJour(semId,salId,i,"valide",false);
                                     updateJour(semId,salId,i,"presaisie",false);
                                   }}
-                                  onBlur={()=>validerHeures(semId,salId,i)}/>
-                                <span style={{fontSize:9,color:"#aaa"}}>/{hRef}</span>
-                                {/* Bouton validation individuelle */}
-                                {!j.valide&&!j.ferie&&(
-                                  <button
-                                    title="Valider ces heures"
-                                    style={{fontSize:10,width:18,height:18,borderRadius:"50%",border:"1.5px solid #27ae60",background:"#fff",color:"#27ae60",cursor:"pointer",fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}
-                                    onClick={()=>validerHeures(semId,salId,i)}>✓</button>
-                                )}
-                                {j.valide&&!j.ferie&&(
-                                  <span style={{fontSize:10,color:"#27ae60",fontWeight:900}} title="Validé — cliquer dans le champ pour modifier">✓</span>
-                                )}
+                                  onBlur={()=>{ if(parseFloat(j.heures)!==hRef) validerHeures(semId,salId,i); }}
+                                />
+                                <span style={{fontSize:9,color:"#bbb"}}>/{hRef}</span>
                               </div>
                             </td>
                             <td style={CSS.jtd}>
