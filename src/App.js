@@ -14,7 +14,18 @@ const firebaseConfig = {
 let db = null;
 try { const app = initializeApp(firebaseConfig); db = getFirestore(app); } catch(e) {}
 async function fbSave(data) { if(!db) return; try { await setDoc(doc(db,"paie","v2"),data); } catch(e){} }
-async function fbLoad() { if(!db) return null; try { const s=await getDoc(doc(db,"paie","v2")); return s.exists()?s.data():null; } catch(e){ return null; } }
+async function fbLoad() {
+  if(!db) return null;
+  try {
+    // Essayer d'abord la nouvelle clé v2
+    let s=await getDoc(doc(db,"paie","v2"));
+    if(s.exists()) return s.data();
+    // Sinon essayer l'ancienne clé "donnees"
+    s=await getDoc(doc(db,"paie","donnees"));
+    if(s.exists()) return s.data();
+    return null;
+  } catch(e){ return null; }
+}
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 const SK = "hubert_paie_v6";
@@ -311,8 +322,9 @@ export default function App() {
   // ─── Persistence ──────────────────────────────────────────────────────────
   useEffect(()=>{
     async function load(){
+      // Essai Firebase d'abord
       const data=await fbLoad();
-      const src=data||JSON.parse(localStorage.getItem(SK)||"{}");
+      const src=data||JSON.parse(localStorage.getItem(SK)||localStorage.getItem("hubert_paie_v5")||localStorage.getItem("hubert_paie_v4")||"{}");
       if(src.semaines) setSemaines(src.semaines);
       if(src.salaries) setSalaries(src.salaries);
       if(src.chantiers)setChantiers(src.chantiers);
@@ -540,14 +552,56 @@ export default function App() {
                       <div style={CSS.formNom}>{sal.nom}</div>
                       <div style={CSS.formSub}>{sal.contrat} · Coef. {sal.coef}{sal.tauxH?` · ${sal.tauxH}€/h`:""} · S{semaine.numSem}</div>
                     </div>
-                    {calcSem&&(
-                      <div style={CSS.pills}>
-                        <Pill l="Total" v={calcSem.total.toFixed(1)+"h"} c="#1a3a5c"/>
-                        <Pill l="HS 25%" v={calcSem.hs25.toFixed(1)+"h"} c="#e67e22" dim={!calcSem.hs25}/>
-                        <Pill l="HS 50%" v={calcSem.hs50.toFixed(1)+"h"} c="#c0392b" dim={!calcSem.hs50}/>
-                        <Pill l="Abs." v={calcSem.absH.toFixed(1)+"h"} c="#8e44ad" dim={!calcSem.absH}/>
+                    <div style={{display:"flex",gap:10,alignItems:"center"}}>
+                      {/* Actions globales semaine */}
+                      <div style={{display:"flex",gap:6,alignItems:"center",background:"#f8fafc",borderRadius:7,padding:"4px 8px",border:"1px solid #e0e6f0"}}>
+                        {/* Veh entreprise toute la semaine */}
+                        <label style={{fontSize:10,cursor:"pointer",display:"flex",alignItems:"center",gap:3}}>
+                          <input type="checkbox"
+                            checked={saisieAct.jours.filter(j=>!j.ferie&&j.heures).every(j=>j.vehEnt)}
+                            onChange={e=>{
+                              const val=e.target.checked;
+                              setSemaines(p=>p.map(s=>{
+                                if(s.id!==semId)return s;
+                                const jours=s.saisies[salId].jours.map(j=>(!j.ferie&&j.heures)?{...j,vehEnt:val}:j);
+                                return{...s,saisies:{...s.saisies,[salId]:{...s.saisies[salId],jours}}};
+                              }));
+                            }}/>
+                          🚐 sem.
+                        </label>
+                        {/* Motif absence toute la semaine */}
+                        <select style={{...CSS.input,fontSize:10,padding:"2px 5px"}}
+                          value=""
+                          onChange={e=>{
+                            if(!e.target.value)return;
+                            const motif=e.target.value;
+                            setSemaines(p=>p.map(s=>{
+                              if(s.id!==semId)return s;
+                              const jours=s.saisies[salId].jours.map(j=>{
+                                if(j.ferie)return j;
+                                const hRef=hStd(j.dateStr);
+                                return{...j,heures:"0",absHeures:String(hRef),motifAbs:motif,valide:true};
+                              });
+                              // Ajouter absences consolidées
+                              const totalAbs=jours.reduce((acc,j)=>acc+(parseFloat(j.absHeures)||0),0);
+                              const absences=[{heures:totalAbs,motif,dateStr:jours[0]?.dateStr,id:Date.now().toString()}];
+                              return{...s,saisies:{...s.saisies,[salId]:{...s.saisies[salId],jours,absences}}};
+                            }));
+                            e.target.value="";
+                          }}>
+                          <option value="">🏥 Absent sem.</option>
+                          {MOTIFS.map(m=><option key={m}>{m}</option>)}
+                        </select>
                       </div>
-                    )}
+                      {calcSem&&(
+                        <div style={CSS.pills}>
+                          <Pill l="Total" v={calcSem.total.toFixed(1)+"h"} c="#1a3a5c"/>
+                          <Pill l="HS 25%" v={calcSem.hs25.toFixed(1)+"h"} c="#e67e22" dim={!calcSem.hs25}/>
+                          <Pill l="HS 50%" v={calcSem.hs50.toFixed(1)+"h"} c="#c0392b" dim={!calcSem.hs50}/>
+                          <Pill l="Abs." v={calcSem.absH.toFixed(1)+"h"} c="#8e44ad" dim={!calcSem.absH}/>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {/* Table jours */}
@@ -566,7 +620,8 @@ export default function App() {
                       {saisieAct.jours.map((j,i)=>{
                         const bg=j.ferie?"#fffbea":j.valide&&parseFloat(j.heures)<hStd(j.dateStr)?"#fdf0ff":j.valide?"#f0fff4":"#fff";
                         const hRef=hStd(j.dateStr);
-                        const h=parseFloat(j.heures)||0;
+                        // Présaisie : gris si pas encore validé
+                        const hDisplay = j.heures !== "" ? j.heures : (sal.id===7 ? "7" : String(hRef));
                         return(
                           <tr key={i} style={{background:bg}}>
                             <td style={CSS.jtd}>
@@ -577,30 +632,68 @@ export default function App() {
                               <div style={{display:"flex",gap:3,alignItems:"center"}}>
                                 <input type="number" min="0" max="12" step="0.5"
                                   style={{...CSS.hInput,...(!j.valide?{color:"#bbb"}:{fontWeight:700,color:"#1a3a5c"})}}
-                                  value={j.heures}
+                                  value={hDisplay}
                                   onChange={e=>{updateJour(semId,salId,i,"heures",e.target.value);updateJour(semId,salId,i,"valide",false);}}
-                                  onBlur={()=>validerHeures(semId,salId,i)}/>
+                                  onBlur={()=>{
+                                    // Si vide, pré-remplir
+                                    if(j.heures===""){
+                                      updateJour(semId,salId,i,"heures",sal.id===7?"7":String(hRef));
+                                    }
+                                    validerHeures(semId,salId,i);
+                                  }}/>
                                 <span style={{fontSize:9,color:"#aaa"}}>/{hRef}</span>
                               </div>
                             </td>
                             <td style={CSS.jtd}>
-                              <select style={CSS.chSel} value={j.chantier||""}
-                                onChange={e=>{
-                                  const v=e.target.value;
-                                  updateJour(semId,salId,i,"chantier",v);
-                                  if(v==="CFA") updateJour(semId,salId,i,"zone",null);
-                                  else{ const ch=chantiers.find(c=>c.id===v); if(ch) updateJour(semId,salId,i,"zone",ch.zone); }
-                                }}>
-                                <option value="">—</option>
-                                <option value="CFA">CFA</option>
-                                {chantiers.map(c=><option key={c.id} value={c.id}>{c.nom} Z{c.zone}</option>)}
-                              </select>
+                              <div style={{display:"flex",gap:3,alignItems:"center"}}>
+                                <select style={CSS.chSel} value={j.chantier||""}
+                                  onChange={e=>{
+                                    const v=e.target.value;
+                                    // Propager chantier + zone au reste de la semaine
+                                    const ch=chantiers.find(c=>c.id===v);
+                                    const z=v==="CFA"?null:(ch?ch.zone:j.zone);
+                                    setSemaines(p=>p.map(s=>{
+                                      if(s.id!==semId)return s;
+                                      const jours=s.saisies[salId].jours.map((jj,ii)=>{
+                                        if(ii<i||jj.ferie)return jj;
+                                        return{...jj,chantier:v,zone:jj.zoneForce||z};
+                                      });
+                                      return{...s,saisies:{...s.saisies,[salId]:{...s.saisies[salId],jours}}};
+                                    }));
+                                  }}>
+                                  <option value="">— chantier —</option>
+                                  <option value="CFA">CFA</option>
+                                  {chantiers.map(c=><option key={c.id} value={c.id}>{c.nom} · Z{c.zone}</option>)}
+                                </select>
+                                {/* Contrôle saisie texte chantier */}
+                                {j.chantier&&j.chantier!=="CFA"&&(
+                                  <span style={{fontSize:9,color:"#27ae60",fontWeight:700}}>✓</span>
+                                )}
+                                {!j.chantier&&!j.ferie&&j.valide&&(
+                                  <span style={{fontSize:9,color:"#e67e22"}} title="Chantier non renseigné">⚠</span>
+                                )}
+                              </div>
                             </td>
                             <td style={{...CSS.jtd,textAlign:"center"}}>
                               {j.chantier&&j.chantier!=="CFA"&&(
-                                <select style={CSS.zSel} value={j.zone||""} onChange={e=>updateJour(semId,salId,i,"zone",+e.target.value)}>
-                                  {ZONES.map(z=><option key={z} value={z}>{z}</option>)}
-                                </select>
+                                <div style={{display:"flex",gap:2,alignItems:"center"}}>
+                                  <select style={CSS.zSel} value={j.zoneForce||j.zone||""}
+                                    onChange={e=>{
+                                      const z=+e.target.value;
+                                      // Zone forcée : propager au reste de la semaine
+                                      setSemaines(p=>p.map(s=>{
+                                        if(s.id!==semId)return s;
+                                        const jours=s.saisies[salId].jours.map((jj,ii)=>{
+                                          if(ii<i||jj.ferie||jj.chantier!==j.chantier)return jj;
+                                          return{...jj,zone:z,zoneForce:z};
+                                        });
+                                        return{...s,saisies:{...s.saisies,[salId]:{...s.saisies[salId],jours}}};
+                                      }));
+                                    }}>
+                                    {ZONES.map(z=><option key={z} value={z}>{z}</option>)}
+                                  </select>
+                                  {j.zoneForce&&<span style={{fontSize:8,color:"#e67e22"}} title="Zone forcée manuellement">F</span>}
+                                </div>
                               )}
                             </td>
                             <td style={{...CSS.jtd,textAlign:"center"}}>
@@ -626,9 +719,9 @@ export default function App() {
                       <div style={CSS.secTitle}>💰 Primes</div>
                       {(saisieAct.primes||[]).map((p,i)=>(
                         <div key={i} style={CSS.primeRow}>
-                          <input style={{...CSS.input,width:70}} type="number" placeholder="€" value={p.montant||""}
+                          <input style={{...CSS.input,width:65}} type="number" placeholder="€" value={p.montant||""}
                             onChange={e=>{const pr=[...(saisieAct.primes||[])];pr[i]={...pr[i],montant:e.target.value};updateSaisie(semId,salId,"primes",pr);}}/>
-                          <input style={{...CSS.input,flex:1}} placeholder="Libellé prime" value={p.libelle||""}
+                          <input style={{...CSS.input,flex:1}} placeholder="Libellé" value={p.libelle||""}
                             onChange={e=>{const pr=[...(saisieAct.primes||[])];pr[i]={...pr[i],libelle:e.target.value};updateSaisie(semId,salId,"primes",pr);}}/>
                           <button style={CSS.btnDel} onClick={()=>updateSaisie(semId,salId,"primes",(saisieAct.primes||[]).filter((_,j)=>j!==i))}>✕</button>
                         </div>
@@ -641,48 +734,49 @@ export default function App() {
                       <div style={CSS.mensuelRow}>
                         <div style={CSS.field}>
                           <label style={CSS.label}>Taux H (€)</label>
-                          <input type="number" style={{...CSS.input,width:70}} value={(extras[salId]||{}).tauxH??sal.tauxH??""}
+                          <input type="number" style={{...CSS.input,width:65}} value={(extras[salId]||{}).tauxH??sal.tauxH??""}
                             onChange={e=>setExtras(p=>({...p,[salId]:{...(p[salId]||{}),tauxH:e.target.value}}))}/>
                         </div>
                         <div style={CSS.field}>
                           <label style={CSS.label}>Acompte (€)</label>
-                          <input type="number" style={{...CSS.input,width:70}} value={(extras[salId]||{}).acompte||""}
+                          <input type="number" style={{...CSS.input,width:65}} value={(extras[salId]||{}).acompte||""}
                             onChange={e=>setExtras(p=>({...p,[salId]:{...(p[salId]||{}),acompte:e.target.value}}))}/>
                         </div>
                         <div style={CSS.field}>
                           <label style={CSS.label}>Saisie arrêt</label>
-                          <input type="number" style={{...CSS.input,width:70}} value={(extras[salId]||{}).saisieArr||""}
+                          <input type="number" style={{...CSS.input,width:65}} value={(extras[salId]||{}).saisieArr||""}
                             onChange={e=>setExtras(p=>({...p,[salId]:{...(p[salId]||{}),saisieArr:e.target.value}}))}/>
                         </div>
                         {sal.id===7&&(
                           <div style={CSS.field}>
                             <label style={CSS.label}>Frais pro (€)</label>
-                            <input type="number" style={{...CSS.input,width:70}} value={(extras[salId]||{}).fraisPro||""}
+                            <input type="number" style={{...CSS.input,width:65}} value={(extras[salId]||{}).fraisPro||""}
                               onChange={e=>setExtras(p=>({...p,[salId]:{...(p[salId]||{}),fraisPro:e.target.value}}))}/>
                           </div>
                         )}
                         <div style={{...CSS.field,flex:1}}>
                           <label style={CSS.label}>Observations</label>
-                          <input style={{...CSS.input,width:"100%"}} value={(extras[salId]||{}).obs||""}
+                          <input style={{...CSS.input}} value={(extras[salId]||{}).obs||""}
                             onChange={e=>setExtras(p=>({...p,[salId]:{...(p[salId]||{}),obs:e.target.value}}))}/>
                         </div>
                       </div>
                     </div>
                   </div>
 
-                  {/* Navigation salariés */}
+                  {/* Navigation salariés — salarié suivant visible en bas */}
                   <div style={CSS.navSal}>
                     {salaries.findIndex(s=>s.id===salId)>0&&(
                       <button style={CSS.btnSec} onClick={()=>setSalId(salaries[salaries.findIndex(s=>s.id===salId)-1].id)}>
-                        ← {salaries[salaries.findIndex(s=>s.id===salId)-1].nom.split(" ")[0]}
+                        ← {salaries[salaries.findIndex(s=>s.id===salId)-1].nom}
                       </button>
                     )}
-                    <div/>
-                    {salaries.findIndex(s=>s.id===salId)<salaries.length-1&&(
-                      <button style={CSS.btnPrimary} onClick={()=>setSalId(salaries[salaries.findIndex(s=>s.id===salId)+1].id)}>
-                        {salaries[salaries.findIndex(s=>s.id===salId)+1].nom.split(" ")[0]} →
+                    {salaries.findIndex(s=>s.id===salId)<salaries.length-1?(
+                      <button style={{...CSS.btnPrimary,display:"flex",alignItems:"center",gap:6}}
+                        onClick={()=>setSalId(salaries[salaries.findIndex(s=>s.id===salId)+1].id)}>
+                        <span style={{fontSize:10,opacity:.7}}>Suivant →</span>
+                        <span style={{fontWeight:700}}>{salaries[salaries.findIndex(s=>s.id===salId)+1].nom}</span>
                       </button>
-                    )}
+                    ):<div style={{fontSize:11,color:"#27ae60",fontWeight:700,padding:"5px 10px",background:"#f0fff4",borderRadius:7}}>✓ Tous les salariés saisis</div>}
                   </div>
                 </div>
               )}
