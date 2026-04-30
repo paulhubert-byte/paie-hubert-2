@@ -103,35 +103,43 @@ function calcSemaine(jours) {
 }
 
 // ─── Calcul mensuel salarié ───────────────────────────────────────────────────
-function calcMois(semaines, salId) {
+function calcMois(semaines, salId, moisIdx, annee, salaries) {
+  const sal = salaries?.find(s=>s.id===salId);
   let hs25=0, hs50=0, absH=0, paniers=0;
   const trajet=Object.fromEntries(ZONES.map(z=>[z,0]));
   const transport=Object.fromEntries(ZONES.map(z=>[z,0]));
-  const absences=[]; // {heures, motif, dates}
+  const absences=[];
   const primes=[];
 
   semaines.forEach(sem=>{
     const saisie = sem.saisies?.[salId];
     if(!saisie) return;
+
+    const joursDuMois = (saisie.jours||[]).filter(j=>{
+      const d=new Date(j.dateStr);
+      return d.getMonth()+1===moisIdx && d.getFullYear()===annee;
+    });
+
     const r = calcSemaine(saisie.jours||[]);
     hs25 += r.hs25; hs50 += r.hs50; absH += r.absH;
-    // Paniers : jours > 4h sans CFA
-    (saisie.jours||[]).forEach(j=>{
+
+    joursDuMois.forEach(j=>{
       const h=parseFloat(j.heures)||0;
-      if(h>4 && j.chantier!=="CFA") paniers++;
+      // Pas de panier pour les cadres forfait (Paul Hubert)
+      if(h>4 && j.chantier!=="CFA" && !sal?.forfait) paniers++;
       if(j.chantier && j.chantier!=="CFA" && j.zone) {
         trajet[j.zone]=(trajet[j.zone]||0)+1;
         if(!j.vehEnt) transport[j.zone]=(transport[j.zone]||0)+1;
       }
     });
-    // Absences
+
     (saisie.absences||[]).forEach(ab=>{ if(ab.heures||ab.motif) absences.push(ab); });
-    // Primes
     (saisie.primes||[]).forEach(p=>{ if(p.montant||p.libelle) primes.push(p); });
   });
 
   const H = Math.round((H_MOIS - absH + hs25 + hs50)*100)/100;
-  return {H, hs25:Math.round(hs25*100)/100, hs50:Math.round(hs50*100)/100, absH:Math.round(absH*100)/100, paniers, trajet, transport, absences, primes};
+  return {H, hs25:Math.round(hs25*100)/100, hs50:Math.round(hs50*100)/100,
+          absH:Math.round(absH*100)/100, paniers, trajet, transport, absences, primes};
 }
 
 // ─── Génération Excel ─────────────────────────────────────────────────────────
@@ -139,7 +147,16 @@ async function genererExcel(moisIdx, annee, semaines, salaries, chantiers, extra
   const XLSX = await import("https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs");
   const wb   = XLSX.utils.book_new();
   const moisNom = MOIS[moisIdx-1];
-  const semMois = semaines.filter(s=>s.mois===moisIdx&&s.annee===annee);
+  const semMois = semaines.filter(s=>
+    s.annee===annee&&
+    (s.mois===moisIdx ||
+     // Inclure semaines à cheval ayant au moins 1 jour dans le mois
+     (s.saisies&&Object.values(s.saisies)[0]?.jours?.some(j=>{
+       const d=new Date(j.dateStr);
+       return d.getMonth()+1===moisIdx&&d.getFullYear()===annee;
+     }))
+    )
+  );
 
   // Structure colonnes (35 colonnes A..AI) :
   // A=Nom/Contrat  B=Coef/TauxH  C=Abattement
@@ -205,7 +222,7 @@ async function genererExcel(moisIdx, annee, semaines, salaries, chantiers, extra
   let dataRow = 5; // index 0-based dans aoa
 
   salaries.forEach(sal=>{
-    const c  = calcMois(semMois, sal.id);
+    const c  = calcMois(semMois, sal.id, moisIdx, annee, salaries);
     const ex = extras[sal.id]||{};
     const tauxH = (ex.tauxH!==undefined&&ex.tauxH!=='') ? ex.tauxH : sal.tauxH;
 
@@ -262,7 +279,7 @@ async function genererExcel(moisIdx, annee, semaines, salaries, chantiers, extra
     rowData[32] = ex.acompte||null;
     rowData[33] = ex.saisieArr||null;
     const obs=[];
-    if(ex.fraisPro) obs.push(`Rembt frais professionnels`);
+    if(ex.fraisPro) obs.push(`Rembt frais professionnels ${ex.fraisPro}€`);
     if(ex.obs) obs.push(ex.obs);
     rowData[34] = obs.join(" | ")||null;
     aoa.push(rowData);
@@ -366,7 +383,15 @@ export default function App() {
   function toast_(msg,ok=true){setToast({msg,ok});setTimeout(()=>setToast({msg:"",ok:true}),3000);}
 
   // ─── Semaines ─────────────────────────────────────────────────────────────
-  const semMois = semaines.filter(s=>s.mois===mois&&s.annee===annee);
+  const semMois = semaines.filter(s=>
+    s.annee===annee&&
+    (s.mois===mois ||
+     (s.saisies&&Object.values(s.saisies)[0]?.jours?.some(j=>{
+       const d=new Date(j.dateStr);
+       return d.getMonth()+1===mois&&d.getFullYear()===annee;
+     }))
+    )
+  );
   const semaine = semaines.find(s=>s.id===semId);
   const sal     = salaries.find(s=>s.id===salId);
 
@@ -985,7 +1010,7 @@ export default function App() {
                 </tr></thead>
                 <tbody>
                   {salaries.map((s,i)=>{
-                    const c=calcMois(semMois,s.id);
+                    const c=calcMois(semMois,s.id,mois,annee,salaries);
                     const ex=extras[s.id]||{};
                     return(
                       <tr key={s.id} style={i%2===0?{background:"#f8fafc"}:{}}>
