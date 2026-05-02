@@ -356,21 +356,6 @@ async function genererExcel(moisIdx, annee, semaines, salaries, chantiers, extra
   XLSX.writeFile(wb, `Saisie_EV_${moisNom}_${annee}.xlsx`);
 }
 
-  const ws = XLSX.utils.aoa_to_sheet(aoa);
-  ws["!merges"] = merges;
-
-  ws["!cols"] = [
-    {wch:21.9},{wch:9.3},{wch:4.5},{wch:8.4},{wch:9.3},{wch:9.1},
-    {wch:10.9},{wch:16.1},{wch:20.9},{wch:12.4},{wch:19.7},{wch:11.7},
-    ...Array(10).fill({wch:6.7}),  // trajet
-    ...Array(10).fill({wch:6.7}),  // transport
-    {wch:12.9},{wch:9.0},{wch:34.9}
-  ];
-
-  XLSX.utils.book_append_sheet(wb, ws, moisNom);
-  XLSX.writeFile(wb, `Saisie_EV_${moisNom}_${annee}.xlsx`);
-}
-
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // APP
