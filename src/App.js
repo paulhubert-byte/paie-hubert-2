@@ -105,11 +105,14 @@ function calcSemaine(jours) {
 // ─── Calcul mensuel salarié ───────────────────────────────────────────────────
 function calcMois(semaines, salId, moisIdx, annee, salaries) {
   const sal = salaries?.find(s=>s.id===salId);
-  let hs25=0, hs50=0, absH=0, paniers=0;
+  const isForfait = sal?.forfait || sal?.coef==="Cadre";
+  let hs25=0, hs50=0, paniers=0;
   const trajet=Object.fromEntries(ZONES.map(z=>[z,0]));
   const transport=Object.fromEntries(ZONES.map(z=>[z,0]));
-  const absences=[];
   const primes=[];
+
+  // Absences directement depuis les jours saisis (source de vérité)
+  const absMapJours={};
 
   semaines.forEach(sem=>{
     const saisie = sem.saisies?.[salId];
@@ -120,26 +123,42 @@ function calcMois(semaines, salId, moisIdx, annee, salaries) {
       return d.getMonth()+1===moisIdx && d.getFullYear()===annee;
     });
 
+    // HS sur la semaine entière (convention bâtiment)
     const r = calcSemaine(saisie.jours||[]);
-    hs25 += r.hs25; hs50 += r.hs50; absH += r.absH;
+    hs25 += r.hs25; hs50 += r.hs50;
 
     joursDuMois.forEach(j=>{
       const h=parseFloat(j.heures)||0;
-      // Pas de panier pour les cadres forfait (Paul Hubert)
-      if(h>4 && j.chantier!=="CFA" && !sal?.forfait) paniers++;
-      if(j.chantier && j.chantier!=="CFA" && j.zone) {
+      // Paniers : >4h, pas CFA, pas forfait
+      if(h>4 && j.chantier!=="CFA" && !isForfait) paniers++;
+      // Trajet/transport : uniquement si chantier renseigné et zone définie
+      if(j.chantier && j.chantier!=="CFA" && j.zone){
         trajet[j.zone]=(trajet[j.zone]||0)+1;
         if(!j.vehEnt) transport[j.zone]=(transport[j.zone]||0)+1;
       }
+      // Absences depuis les jours
+      const absH=parseFloat(j.absHeures)||0;
+      if(absH>0 && j.motifAbs){
+        const k=j.motifAbs;
+        if(!absMapJours[k]) absMapJours[k]={heures:0,dates:[]};
+        absMapJours[k].heures=Math.round((absMapJours[k].heures+absH)*100)/100;
+        absMapJours[k].dates.push(j.dateStr);
+      }
     });
 
-    (saisie.absences||[]).forEach(ab=>{ if(ab.heures||ab.motif) absences.push(ab); });
     (saisie.primes||[]).forEach(p=>{ if(p.montant||p.libelle) primes.push(p); });
   });
 
-  const H = Math.round((H_MOIS - absH + hs25 + hs50)*100)/100;
-  return {H, hs25:Math.round(hs25*100)/100, hs50:Math.round(hs50*100)/100,
-          absH:Math.round(absH*100)/100, paniers, trajet, transport, absences, primes};
+  const absEntries=Object.entries(absMapJours);
+  const absH=absEntries.reduce((s,[,v])=>s+v.heures,0);
+  const H = isForfait ? null : Math.round((H_MOIS - absH + hs25 + hs50)*100)/100;
+
+  return {
+    H, hs25:Math.round(hs25*100)/100, hs50:Math.round(hs50*100)/100,
+    absH:Math.round(absH*100)/100, paniers, trajet, transport,
+    absEntries, // [{motif, {heures, dates[]}}]
+    primes, isForfait
+  };
 }
 
 // ─── Génération Excel ─────────────────────────────────────────────────────────
@@ -226,40 +245,24 @@ async function genererExcel(moisIdx, annee, semaines, salaries, chantiers, extra
     const ex = extras[sal.id]||{};
     const tauxH = (ex.tauxH!==undefined&&ex.tauxH!=='') ? ex.tauxH : sal.tauxH;
 
-    // ── Construire les absences depuis les jours saisis (source de vérité)
-    // plutôt que depuis saisie.absences qui peut être incomplète
-    const absMapJours={};
-    semMois.forEach(sem=>{
-      const saisie=sem.saisies?.[sal.id];
-      if(!saisie)return;
-      (saisie.jours||[]).forEach(j=>{
-        const d=new Date(j.dateStr);
-        if(d.getMonth()+1!==moisIdx||d.getFullYear()!==annee)return;
-        if(!j.valide)return;
-        const absH=parseFloat(j.absHeures)||0;
-        if(absH<=0)return;
-        const motif=j.motifAbs||"Absence";
-        if(!absMapJours[motif]) absMapJours[motif]={heures:0,dates:[]};
-        absMapJours[motif].heures=Math.round((absMapJours[motif].heures+absH)*100)/100;
-        absMapJours[motif].dates.push(fmtDateFR(j.dateStr));
-      });
-    });
-    const absEntries=Object.entries(absMapJours);
+    // ── Construire les absences depuis calcMois (source unique de vérité)
+    const absEntries = c.absEntries||[];
     const nbAbs    = absEntries.length;
     const nbPrimes = c.primes.length;
     const nbSuppl  = Math.max(0, nbAbs-1, nbPrimes-1);
-    const totalLignes = 2 + nbSuppl; // ligne nom + ligne données + lignes supp
+    const totalLignes = 2 + nbSuppl;
 
     // ── LIGNE NOM
     const rowNom = Array(NC).fill(null);
     rowNom[0] = sal.nom;
     rowNom[1] = sal.coef!=="Cadre" ? sal.coef : null;
-    rowNom[2] = sal.abattement ? "/" : null;
+    rowNom[2] = sal.abattement ? "OUI" : null;
     if(absEntries.length>0){
       const[m,d]=absEntries[0];
+      const dates=d.dates.sort();
       rowNom[6]=d.heures||null; rowNom[7]=m;
-      rowNom[8]=d.dates.length===1 ? d.dates[0]
-              : d.dates.length>1  ? `${d.dates[0]} au ${d.dates[d.dates.length-1]}`
+      rowNom[8]=dates.length===1 ? fmtDateFR(dates[0])
+              : dates.length>1  ? `du ${fmtDateFR(dates[0])} au ${fmtDateFR(dates[dates.length-1])}`
               : null;
     }
     if(c.primes.length>0){
@@ -272,11 +275,10 @@ async function genererExcel(moisIdx, annee, semaines, salaries, chantiers, extra
     const rowData = Array(NC).fill(null);
     rowData[0] = sal.contrat;
     rowData[1] = tauxH;
-    // Paul Hubert (forfait) n'a pas de H mensuel ni de paniers
-    if(!sal.forfait) rowData[3] = c.H;
+    if(!c.isForfait) rowData[3] = c.H;
     rowData[4] = c.hs25||null;
     rowData[5] = c.hs50||null;
-    if(!sal.forfait) rowData[11] = c.paniers||null;
+    if(!c.isForfait) rowData[11] = c.paniers||null;
     for(let i=0;i<10;i++){
       rowData[12+i] = c.trajet[i+1]||null;
       rowData[22+i] = c.transport[i+1]||null;
@@ -294,9 +296,10 @@ async function genererExcel(moisIdx, annee, semaines, salaries, chantiers, extra
       const rowX = Array(NC).fill(null);
       if(i+1<absEntries.length){
         const[m,d]=absEntries[i+1];
+        const dates=d.dates.sort();
         rowX[6]=d.heures||null; rowX[7]=m;
-        rowX[8]=d.dates.length===1 ? d.dates[0]
-               : d.dates.length>1  ? `${d.dates[0]} au ${d.dates[d.dates.length-1]}`
+        rowX[8]=dates.length===1 ? fmtDateFR(dates[0])
+               : dates.length>1  ? `du ${fmtDateFR(dates[0])} au ${fmtDateFR(dates[dates.length-1])}`
                : null;
       }
       if(i+1<c.primes.length){
@@ -1029,32 +1032,48 @@ export default function App() {
           </div>
           {semMois.length===0&&<Vide icone="📊" texte="Aucune semaine saisie pour ce mois"/>}
           {semMois.length>0&&(
-            <div style={{overflowX:"auto"}}>
+            <div style={{overflowX:"auto",flex:1}}>
               <table style={CSS.rtbl}>
-                <thead><tr>
-                  <th style={{...CSS.rth,textAlign:"left",minWidth:160}}>Salarié</th>
-                  <th style={CSS.rth}>H mois</th>
-                  <th style={CSS.rth}>HS 25%</th>
-                  <th style={CSS.rth}>HS 50%</th>
-                  <th style={CSS.rth}>Abs. H</th>
-                  <th style={CSS.rth}>Paniers</th>
-                  <th style={CSS.rth}>Acompte</th>
-                  <th style={{...CSS.rth,minWidth:140}}>Obs.</th>
-                </tr></thead>
+                <thead>
+                  <tr>
+                    <th style={{...CSS.rth,textAlign:"left",minWidth:150}}>Salarié</th>
+                    <th style={CSS.rth}>H mois</th>
+                    <th style={CSS.rth}>HS 25%</th>
+                    <th style={CSS.rth}>HS 50%</th>
+                    <th style={CSS.rth}>Abs. H</th>
+                    <th style={CSS.rth}>Absences (motif / dates)</th>
+                    <th style={CSS.rth}>Paniers</th>
+                    {ZONES.map(z=><th key={z} style={{...CSS.rth,fontSize:9}}>Tj{z}</th>)}
+                    {ZONES.map(z=><th key={z} style={{...CSS.rth,fontSize:9,background:"#0d2137"}}>Tr{z}</th>)}
+                    <th style={CSS.rth}>Prime</th>
+                    <th style={CSS.rth}>Acompte</th>
+                    <th style={CSS.rth}>Obs.</th>
+                  </tr>
+                </thead>
                 <tbody>
                   {salaries.map((s,i)=>{
                     const c=calcMois(semMois,s.id,mois,annee,salaries);
                     const ex=extras[s.id]||{};
                     return(
                       <tr key={s.id} style={i%2===0?{background:"#f8fafc"}:{}}>
-                        <td style={{padding:"9px 14px",fontWeight:600}}>{s.nom}</td>
-                        <td style={CSS.rtd}>{s.forfait ? "—" : c.H}</td>
-                        <td style={{...CSS.rtd,color:c.hs25>0?"#e67e22":"#ccc",fontWeight:c.hs25>0?700:400}}>{c.hs25||"—"}</td>
-                        <td style={{...CSS.rtd,color:c.hs50>0?"#c0392b":"#ccc",fontWeight:c.hs50>0?700:400}}>{c.hs50||"—"}</td>
-                        <td style={{...CSS.rtd,color:c.absH>0?"#8e44ad":"#ccc"}}>{c.absH||"—"}</td>
-                        <td style={CSS.rtd}>{c.paniers||"—"}</td>
+                        <td style={{padding:"7px 10px",fontWeight:600,fontSize:12}}>{s.nom}</td>
+                        <td style={CSS.rtd}>{c.isForfait?"—":c.H}</td>
+                        <td style={{...CSS.rtd,color:c.hs25>0?"#e67e22":"#ccc",fontWeight:c.hs25>0?700:400}}>{c.hs25>0?c.hs25:"—"}</td>
+                        <td style={{...CSS.rtd,color:c.hs50>0?"#c0392b":"#ccc",fontWeight:c.hs50>0?700:400}}>{c.hs50>0?c.hs50:"—"}</td>
+                        <td style={{...CSS.rtd,color:c.absH>0?"#e74c3c":"#ccc"}}>{c.absH>0?c.absH:"—"}</td>
+                        <td style={{...CSS.rtd,textAlign:"left",fontSize:10}}>
+                          {c.absEntries.map(([m,d])=>{
+                            const dates=d.dates.sort();
+                            const dStr=dates.length===1?fmtDateFR(dates[0]):`du ${fmtDateFR(dates[0])} au ${fmtDateFR(dates[dates.length-1])}`;
+                            return <div key={m} style={{color:"#e74c3c"}}>{d.heures}h · {m} · {dStr}</div>;
+                          })}
+                        </td>
+                        <td style={CSS.rtd}>{c.isForfait?"—":c.paniers||"—"}</td>
+                        {ZONES.map(z=><td key={z} style={{...CSS.rtd,fontSize:10,color:c.trajet[z]>0?"#2980b9":"#ddd"}}>{c.trajet[z]||""}</td>)}
+                        {ZONES.map(z=><td key={z} style={{...CSS.rtd,fontSize:10,background:"#f0f5ff",color:c.transport[z]>0?"#1a5276":"#ddd"}}>{c.transport[z]||""}</td>)}
+                        <td style={{...CSS.rtd,fontSize:10}}>{c.primes.map(p=>`${p.montant}€ ${p.libelle||""}`).join(" / ")||"—"}</td>
                         <td style={CSS.rtd}>{ex.acompte||"—"}</td>
-                        <td style={CSS.rtd}>{[ex.fraisPro&&`FP:${ex.fraisPro}€`,ex.obs].filter(Boolean).join(" · ")||"—"}</td>
+                        <td style={{...CSS.rtd,fontSize:10,textAlign:"left"}}>{[ex.fraisPro&&`Frais pro: ${ex.fraisPro}€`,ex.obs].filter(Boolean).join(" · ")||"—"}</td>
                       </tr>
                     );
                   })}
