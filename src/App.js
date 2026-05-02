@@ -1027,9 +1027,10 @@ export default function App() {
                     <th style={CSS.rth}>HS 50%</th>
                     <th style={CSS.rth}>Abs. H</th>
                     <th style={CSS.rth}>Absences (motif / dates)</th>
+                    <th style={CSS.rth}>Prime</th>
                     <th style={CSS.rth}>Paniers</th>
-                    {ZONES.map(z=><th key={z} style={{...CSS.rth,fontSize:9}}>Tj{z}</th>)}
-                    {ZONES.map(z=><th key={z} style={{...CSS.rth,fontSize:9,background:"#0d2137"}}>Tr{z}</th>)}
+                    {ZONES.map(z=><th key={`tj${z}`} style={{...CSS.rth,fontSize:9}}>Tj{z}</th>)}
+                    {ZONES.map(z=><th key={`tr${z}`} style={{...CSS.rth,fontSize:9,background:"#0d2137"}}>Tr{z}</th>)}
                     <th style={CSS.rth}>Prime</th>
                     <th style={CSS.rth}>Acompte</th>
                     <th style={CSS.rth}>Obs.</th>
@@ -1053,10 +1054,10 @@ export default function App() {
                             return <div key={m} style={{color:"#e74c3c"}}>{d.heures}h · {m} · {dStr}</div>;
                           })}
                         </td>
-                        <td style={CSS.rtd}>{c.isForfait?"—":c.paniers||"—"}</td>
-                        {ZONES.map(z=><td key={z} style={{...CSS.rtd,fontSize:10,color:c.trajet[z]>0?"#2980b9":"#ddd"}}>{c.trajet[z]||""}</td>)}
-                        {ZONES.map(z=><td key={z} style={{...CSS.rtd,fontSize:10,background:"#f0f5ff",color:c.transport[z]>0?"#1a5276":"#ddd"}}>{c.transport[z]||""}</td>)}
                         <td style={{...CSS.rtd,fontSize:10}}>{c.primes.map(p=>`${p.montant}€ ${p.libelle||""}`).join(" / ")||"—"}</td>
+                        <td style={CSS.rtd}>{c.isForfait?"—":c.paniers||"—"}</td>
+                        {ZONES.map(z=><td key={`tj${z}`} style={{...CSS.rtd,fontSize:10,color:c.trajet[z]>0?"#2980b9":"#ddd"}}>{c.trajet[z]||""}</td>)}
+                        {ZONES.map(z=><td key={`tr${z}`} style={{...CSS.rtd,fontSize:10,background:"#f0f5ff",color:c.transport[z]>0?"#1a5276":"#ddd"}}>{c.transport[z]||""}</td>)}
                         <td style={CSS.rtd}>{ex.acompte||"—"}</td>
                         <td style={{...CSS.rtd,fontSize:10,textAlign:"left"}}>{[ex.fraisPro&&`Frais pro: ${ex.fraisPro}€`,ex.obs].filter(Boolean).join(" · ")||"—"}</td>
                       </tr>
