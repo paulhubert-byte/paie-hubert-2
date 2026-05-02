@@ -1021,28 +1021,40 @@ export default function App() {
               <table style={CSS.rtbl}>
                 <thead>
                   <tr>
-                    <th style={{...CSS.rth,textAlign:"left",minWidth:150}}>Salarié</th>
+                    <th style={{...CSS.rth,textAlign:"left",minWidth:130}}>Salarié</th>
+                    <th style={{...CSS.rth,fontSize:9}}>Contrat</th>
+                    <th style={{...CSS.rth,fontSize:9}}>Coef.</th>
+                    <th style={{...CSS.rth,fontSize:9}}>Taux H</th>
+                    <th style={{...CSS.rth,fontSize:9}}>Abt.</th>
                     <th style={CSS.rth}>H mois</th>
                     <th style={CSS.rth}>HS 25%</th>
                     <th style={CSS.rth}>HS 50%</th>
                     <th style={CSS.rth}>Abs. H</th>
-                    <th style={CSS.rth}>Absences (motif / dates)</th>
+                    <th style={{...CSS.rth,minWidth:180}}>Absences (motif / dates)</th>
                     <th style={CSS.rth}>Prime</th>
                     <th style={CSS.rth}>Paniers</th>
                     {ZONES.map(z=><th key={`tj${z}`} style={{...CSS.rth,fontSize:9}}>Tj{z}</th>)}
                     {ZONES.map(z=><th key={`tr${z}`} style={{...CSS.rth,fontSize:9,background:"#0d2137"}}>Tr{z}</th>)}
-                    <th style={CSS.rth}>Prime</th>
                     <th style={CSS.rth}>Acompte</th>
-                    <th style={CSS.rth}>Obs.</th>
+                    <th style={{...CSS.rth,minWidth:140}}>Observations</th>
                   </tr>
                 </thead>
                 <tbody>
                   {salaries.map((s,i)=>{
                     const c=calcMois(semMois,s.id,mois,annee,salaries);
                     const ex=extras[s.id]||{};
+                    const tauxH=(ex.tauxH!==undefined&&ex.tauxH!=='')?ex.tauxH:s.tauxH;
+                    const obs=[
+                      ex.fraisPro&&`Rembt frais professionnels ${ex.fraisPro}€`,
+                      ex.obs
+                    ].filter(Boolean).join(" | ");
                     return(
                       <tr key={s.id} style={i%2===0?{background:"#f8fafc"}:{}}>
                         <td style={{padding:"7px 10px",fontWeight:600,fontSize:12}}>{s.nom}</td>
+                        <td style={{...CSS.rtd,fontSize:10}}>{s.contrat}</td>
+                        <td style={{...CSS.rtd,fontSize:10}}>{s.coef}</td>
+                        <td style={{...CSS.rtd,fontSize:10}}>{tauxH||"—"}</td>
+                        <td style={{...CSS.rtd,fontSize:10,fontWeight:700,color:s.abattement?"#27ae60":"#ccc"}}>{s.abattement?"OUI":"NON"}</td>
                         <td style={CSS.rtd}>{c.isForfait?"—":c.H}</td>
                         <td style={{...CSS.rtd,color:c.hs25>0?"#e67e22":"#ccc",fontWeight:c.hs25>0?700:400}}>{c.hs25>0?c.hs25:"—"}</td>
                         <td style={{...CSS.rtd,color:c.hs50>0?"#c0392b":"#ccc",fontWeight:c.hs50>0?700:400}}>{c.hs50>0?c.hs50:"—"}</td>
@@ -1059,7 +1071,7 @@ export default function App() {
                         {ZONES.map(z=><td key={`tj${z}`} style={{...CSS.rtd,fontSize:10,color:c.trajet[z]>0?"#2980b9":"#ddd"}}>{c.trajet[z]||""}</td>)}
                         {ZONES.map(z=><td key={`tr${z}`} style={{...CSS.rtd,fontSize:10,background:"#f0f5ff",color:c.transport[z]>0?"#1a5276":"#ddd"}}>{c.transport[z]||""}</td>)}
                         <td style={CSS.rtd}>{ex.acompte||"—"}</td>
-                        <td style={{...CSS.rtd,fontSize:10,textAlign:"left"}}>{[ex.fraisPro&&`Frais pro: ${ex.fraisPro}€`,ex.obs].filter(Boolean).join(" · ")||"—"}</td>
+                        <td style={{...CSS.rtd,fontSize:10,textAlign:"left"}}>{obs||"—"}</td>
                       </tr>
                     );
                   })}
