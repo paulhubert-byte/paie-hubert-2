@@ -226,30 +226,35 @@ async function genererExcel(moisIdx, annee, semaines, salaries, chantiers, extra
     const ex = extras[sal.id]||{};
     const tauxH = (ex.tauxH!==undefined&&ex.tauxH!=='') ? ex.tauxH : sal.tauxH;
 
-    // Regrouper absences par motif
-    const absMap={};
-    c.absences.forEach(ab=>{
-      const k=ab.motif||"Absence";
-      if(!absMap[k]) absMap[k]={heures:0,dates:[]};
-      absMap[k].heures=Math.round((absMap[k].heures+(parseFloat(ab.heures)||0))*100)/100;
-      if(ab.dateStr) absMap[k].dates.push(fmtDateFR(ab.dateStr));
+    // ── Construire les absences depuis les jours saisis (source de vérité)
+    // plutôt que depuis saisie.absences qui peut être incomplète
+    const absMapJours={};
+    semMois.forEach(sem=>{
+      const saisie=sem.saisies?.[sal.id];
+      if(!saisie)return;
+      (saisie.jours||[]).forEach(j=>{
+        const d=new Date(j.dateStr);
+        if(d.getMonth()+1!==moisIdx||d.getFullYear()!==annee)return;
+        if(!j.valide)return;
+        const absH=parseFloat(j.absHeures)||0;
+        if(absH<=0)return;
+        const motif=j.motifAbs||"Absence";
+        if(!absMapJours[motif]) absMapJours[motif]={heures:0,dates:[]};
+        absMapJours[motif].heures=Math.round((absMapJours[motif].heures+absH)*100)/100;
+        absMapJours[motif].dates.push(fmtDateFR(j.dateStr));
+      });
     });
-    const absEntries = Object.entries(absMap);
-    const nbAbs      = absEntries.length;
-    const nbPrimes   = c.primes.length;
-    // Nombre de lignes de données = max(1, nbAbs, nbPrimes)
-    // Ligne 1 = nom + 1ère absence + 1ère prime
-    // Ligne 2 = contrat/taux + données chiffrées
-    // Lignes 3+ = absences/primes supplémentaires
-    const nbSuppl = Math.max(0, nbAbs-1, nbPrimes-1);
+    const absEntries=Object.entries(absMapJours);
+    const nbAbs    = absEntries.length;
+    const nbPrimes = c.primes.length;
+    const nbSuppl  = Math.max(0, nbAbs-1, nbPrimes-1);
     const totalLignes = 2 + nbSuppl; // ligne nom + ligne données + lignes supp
 
-    // ── LIGNE NOM (row A)
+    // ── LIGNE NOM
     const rowNom = Array(NC).fill(null);
     rowNom[0] = sal.nom;
     rowNom[1] = sal.coef!=="Cadre" ? sal.coef : null;
-    rowNom[2] = sal.abattement ? "/" : null; // barre diagonale = "/" visuellement
-    // 1ère absence
+    rowNom[2] = sal.abattement ? "/" : null;
     if(absEntries.length>0){
       const[m,d]=absEntries[0];
       rowNom[6]=d.heures||null; rowNom[7]=m;
@@ -257,21 +262,21 @@ async function genererExcel(moisIdx, annee, semaines, salaries, chantiers, extra
               : d.dates.length>1  ? `${d.dates[0]} au ${d.dates[d.dates.length-1]}`
               : null;
     }
-    // 1ère prime
     if(c.primes.length>0){
       rowNom[9]=parseFloat(c.primes[0].montant)||null;
       rowNom[10]=c.primes[0].libelle||null;
     }
     aoa.push(rowNom);
 
-    // ── LIGNE DONNÉES (row B)
+    // ── LIGNE DONNÉES
     const rowData = Array(NC).fill(null);
     rowData[0] = sal.contrat;
     rowData[1] = tauxH;
-    rowData[3] = c.H;
+    // Paul Hubert (forfait) n'a pas de H mensuel ni de paniers
+    if(!sal.forfait) rowData[3] = c.H;
     rowData[4] = c.hs25||null;
     rowData[5] = c.hs50||null;
-    rowData[11]= c.paniers||null;
+    if(!sal.forfait) rowData[11] = c.paniers||null;
     for(let i=0;i<10;i++){
       rowData[12+i] = c.trajet[i+1]||null;
       rowData[22+i] = c.transport[i+1]||null;
@@ -284,10 +289,9 @@ async function genererExcel(moisIdx, annee, semaines, salaries, chantiers, extra
     rowData[34] = obs.join(" | ")||null;
     aoa.push(rowData);
 
-    // ── LIGNES SUPPLÉMENTAIRES (absences 2+, primes 2+)
+    // ── LIGNES SUPPLÉMENTAIRES
     for(let i=0;i<nbSuppl;i++){
       const rowX = Array(NC).fill(null);
-      // Absence i+1
       if(i+1<absEntries.length){
         const[m,d]=absEntries[i+1];
         rowX[6]=d.heures||null; rowX[7]=m;
@@ -295,7 +299,6 @@ async function genererExcel(moisIdx, annee, semaines, salaries, chantiers, extra
                : d.dates.length>1  ? `${d.dates[0]} au ${d.dates[d.dates.length-1]}`
                : null;
       }
-      // Prime i+1
       if(i+1<c.primes.length){
         rowX[9]=parseFloat(c.primes[i+1].montant)||null;
         rowX[10]=c.primes[i+1].libelle||null;
@@ -303,22 +306,52 @@ async function genererExcel(moisIdx, annee, semaines, salaries, chantiers, extra
       aoa.push(rowX);
     }
 
-    // ── Merges pour ce salarié
-    const rNom  = dataRow;
-    const rData = dataRow+1;
-    const rFin  = dataRow+totalLignes-1;
+    // ── LIGNE VIDE de séparation
+    aoa.push(Array(NC).fill(null));
 
-    // Colonnes fixes fusionnées sur toutes les lignes du salarié
+    // ── Merges pour ce salarié (sans inclure la ligne vide)
+    const rNom  = dataRow;
+    const rFin  = dataRow+totalLignes-1;
     const colsFixes=[0,1,2,3,4,5,11,
-      ...Array(10).fill(0).map((_,i)=>12+i),  // trajet
-      ...Array(10).fill(0).map((_,i)=>22+i),  // transport
+      ...Array(10).fill(0).map((_,i)=>12+i),
+      ...Array(10).fill(0).map((_,i)=>22+i),
       32,33,34];
     colsFixes.forEach(col=>{
       if(rFin>rNom) addM(rNom,col,rFin,col);
     });
 
-    dataRow += totalLignes;
+    // Marquer les lignes d'absence pour couleur rouge
+    // On stocke les indices pour appliquer les styles après
+    for(let i=0;i<totalLignes;i++){
+      const r=rNom+i;
+      const hasAbs = i===0 ? absEntries.length>0 : (i-1)<absEntries.length-1;
+      if(hasAbs){
+        // Stocker pour style rouge — SheetJS lite ne supporte pas les styles
+        // On met le texte en rouge via le format conditionnel pas disponible
+        // Solution : on laisse tel quel, les absences sont visibles par leur contenu
+      }
+    }
+
+    dataRow += totalLignes + 1; // +1 pour la ligne vide
   });
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+
+  // ── Appliquer couleur rouge sur cellules d'absence
+  // SheetJS free ne supporte pas les styles, on skip la couleur
+  ws["!merges"] = merges;
+
+  ws["!cols"] = [
+    {wch:21.9},{wch:9.3},{wch:4.5},{wch:8.4},{wch:9.3},{wch:9.1},
+    {wch:10.9},{wch:16.1},{wch:20.9},{wch:12.4},{wch:19.7},{wch:11.7},
+    ...Array(10).fill({wch:6.7}),
+    ...Array(10).fill({wch:6.7}),
+    {wch:12.9},{wch:9.0},{wch:34.9}
+  ];
+
+  XLSX.utils.book_append_sheet(wb, ws, moisNom);
+  XLSX.writeFile(wb, `Saisie_EV_${moisNom}_${annee}.xlsx`);
+}
 
   const ws = XLSX.utils.aoa_to_sheet(aoa);
   ws["!merges"] = merges;
@@ -1015,7 +1048,7 @@ export default function App() {
                     return(
                       <tr key={s.id} style={i%2===0?{background:"#f8fafc"}:{}}>
                         <td style={{padding:"9px 14px",fontWeight:600}}>{s.nom}</td>
-                        <td style={CSS.rtd}>{c.H}</td>
+                        <td style={CSS.rtd}>{s.forfait ? "—" : c.H}</td>
                         <td style={{...CSS.rtd,color:c.hs25>0?"#e67e22":"#ccc",fontWeight:c.hs25>0?700:400}}>{c.hs25||"—"}</td>
                         <td style={{...CSS.rtd,color:c.hs50>0?"#c0392b":"#ccc",fontWeight:c.hs50>0?700:400}}>{c.hs50||"—"}</td>
                         <td style={{...CSS.rtd,color:c.absH>0?"#8e44ad":"#ccc"}}>{c.absH||"—"}</td>
