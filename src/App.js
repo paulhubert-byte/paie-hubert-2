@@ -1011,33 +1011,66 @@ export default function App() {
         <div style={CSS.body}>
           <div style={CSS.recapBar}>
             <div style={CSS.bigTitle}>Récapitulatif — {MOIS[mois-1]} {annee}</div>
-            <button style={CSS.btnExp}
-              onClick={()=>genererExcel(mois,annee,semaines,salaries,chantiers,extras)}>
-              ⬇ Exporter Excel (Saisie EV)
-            </button>
+            <div style={{display:"flex",gap:8}}>
+              <button style={{...CSS.btnExp,background:"#27ae60"}}
+                onClick={async()=>{
+                  // Capture du tableau via html2canvas
+                  const el=document.getElementById("recap-table");
+                  if(!el){alert("Tableau introuvable");return;}
+                  try{
+                    const h2c=await import("https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.esm.min.js");
+                    const canvas=await h2c.default(el,{scale:2,backgroundColor:"#ffffff",useCORS:true});
+                    const link=document.createElement("a");
+                    link.download=`Recap_paie_${MOIS[mois-1]}_${annee}.png`;
+                    link.href=canvas.toDataURL("image/png");
+                    link.click();
+                  }catch(e){
+                    // Fallback : utiliser l'API native si disponible
+                    alert("Pour capturer, utilisez Ctrl+Maj+S ou l'outil capture de Windows (Win+Maj+S)");
+                  }
+                }}>
+                📸 Capturer
+              </button>
+              <button style={CSS.btnExp}
+                onClick={()=>genererExcel(mois,annee,semaines,salaries,chantiers,extras)}>
+                ⬇ Exporter Excel (Saisie EV)
+              </button>
+            </div>
           </div>
           {semMois.length===0&&<Vide icone="📊" texte="Aucune semaine saisie pour ce mois"/>}
           {semMois.length>0&&(
-            <div style={{overflowX:"auto",flex:1}}>
-              <table style={CSS.rtbl}>
+            <div style={{overflowX:"auto",flex:1}} id="recap-table">
+              <table style={{...CSS.rtbl,borderCollapse:"collapse"}}>
                 <thead>
+                  {/* Ligne 1 : groupes colorés */}
                   <tr>
-                    <th style={{...CSS.rth,textAlign:"left",minWidth:130}}>Salarié</th>
-                    <th style={{...CSS.rth,fontSize:9}}>Contrat</th>
-                    <th style={{...CSS.rth,fontSize:9}}>Coef.</th>
-                    <th style={{...CSS.rth,fontSize:9}}>Taux H</th>
-                    <th style={{...CSS.rth,fontSize:9}}>Abt.</th>
-                    <th style={CSS.rth}>H mois</th>
-                    <th style={CSS.rth}>HS 25%</th>
-                    <th style={CSS.rth}>HS 50%</th>
-                    <th style={CSS.rth}>Abs. H</th>
-                    <th style={{...CSS.rth,minWidth:180}}>Absences (motif / dates)</th>
-                    <th style={CSS.rth}>Prime</th>
-                    <th style={CSS.rth}>Paniers</th>
-                    {ZONES.map(z=><th key={`tj${z}`} style={{...CSS.rth,fontSize:9}}>Tj{z}</th>)}
-                    {ZONES.map(z=><th key={`tr${z}`} style={{...CSS.rth,fontSize:9,background:"#0d2137"}}>Tr{z}</th>)}
-                    <th style={CSS.rth}>Acompte</th>
-                    <th style={{...CSS.rth,minWidth:140}}>Observations</th>
+                    <th colSpan={5} style={{...CSS.rth,background:"#1a3a5c",textAlign:"center",borderRight:"2px solid #fff",fontSize:10}}>SALARIÉ</th>
+                    <th colSpan={4} style={{...CSS.rth,background:"#2980b9",textAlign:"center",borderRight:"2px solid #fff",fontSize:10}}>TEMPS DE TRAVAIL</th>
+                    <th colSpan={1} style={{...CSS.rth,background:"#8e44ad",textAlign:"center",borderRight:"2px solid #fff",fontSize:10}}>ABSENCES</th>
+                    <th colSpan={1} style={{...CSS.rth,background:"#8e44ad",textAlign:"center",borderRight:"2px solid #fff",fontSize:10,minWidth:180}}>DÉTAIL ABSENCES</th>
+                    <th colSpan={2} style={{...CSS.rth,background:"#27ae60",textAlign:"center",borderRight:"2px solid #fff",fontSize:10}}>PRIME / PANIER</th>
+                    <th colSpan={10} style={{...CSS.rth,background:"#2471a3",textAlign:"center",borderRight:"2px solid #fff",fontSize:10}}>TRAJET</th>
+                    <th colSpan={10} style={{...CSS.rth,background:"#1a5276",textAlign:"center",borderRight:"2px solid #fff",fontSize:10}}>TRANSPORT</th>
+                    <th colSpan={2} style={{...CSS.rth,background:"#6c3483",textAlign:"center",fontSize:10}}>DIVERS</th>
+                  </tr>
+                  {/* Ligne 2 : colonnes détaillées */}
+                  <tr>
+                    <th style={{...CSS.rth,background:"#2e4a6c",textAlign:"left",minWidth:130,borderRight:"1px solid #3a5a7c"}}>Salarié</th>
+                    <th style={{...CSS.rth,background:"#2e4a6c",fontSize:9,borderRight:"1px solid #3a5a7c"}}>Contrat</th>
+                    <th style={{...CSS.rth,background:"#2e4a6c",fontSize:9,borderRight:"1px solid #3a5a7c"}}>Coef.</th>
+                    <th style={{...CSS.rth,background:"#2e4a6c",fontSize:9,borderRight:"1px solid #3a5a7c"}}>Taux H</th>
+                    <th style={{...CSS.rth,background:"#2e4a6c",fontSize:9,borderRight:"2px solid #fff"}}>Abt.</th>
+                    <th style={{...CSS.rth,background:"#3498db",borderRight:"1px solid #5dade2"}}>H mois</th>
+                    <th style={{...CSS.rth,background:"#e67e22",borderRight:"1px solid #f0a030"}}>HS 25%</th>
+                    <th style={{...CSS.rth,background:"#c0392b",borderRight:"1px solid #e74c3c"}}>HS 50%</th>
+                    <th style={{...CSS.rth,background:"#3498db",borderRight:"2px solid #fff"}}>Abs. H</th>
+                    <th style={{...CSS.rth,background:"#9b59b6",minWidth:180,borderRight:"2px solid #fff"}}>Motif / Dates</th>
+                    <th style={{...CSS.rth,background:"#27ae60",borderRight:"1px solid #2ecc71"}}>Prime</th>
+                    <th style={{...CSS.rth,background:"#16a085",borderRight:"2px solid #fff"}}>Paniers</th>
+                    {ZONES.map(z=><th key={`tj${z}`} style={{...CSS.rth,background:"#2980b9",fontSize:9,borderRight:"1px solid #5dade2",minWidth:28}}>Z{z}</th>)}
+                    {ZONES.map((z,i)=><th key={`tr${z}`} style={{...CSS.rth,background:"#1a5276",fontSize:9,borderRight:i===9?"2px solid #fff":"1px solid #2471a3",minWidth:28}}>Z{z}</th>)}
+                    <th style={{...CSS.rth,background:"#6c3483",borderRight:"1px solid #7d3c98"}}>Acompte</th>
+                    <th style={{...CSS.rth,background:"#6c3483",minWidth:140}}>Observations</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1049,30 +1082,31 @@ export default function App() {
                       ex.fraisPro&&`Rembt frais professionnels ${ex.fraisPro}€`,
                       ex.obs
                     ].filter(Boolean).join(" | ");
+                    const rowBg = i%2===0?"#f0f4f8":"#ffffff";
                     return(
-                      <tr key={s.id} style={i%2===0?{background:"#f8fafc"}:{}}>
-                        <td style={{padding:"7px 10px",fontWeight:600,fontSize:12}}>{s.nom}</td>
-                        <td style={{...CSS.rtd,fontSize:10}}>{s.contrat}</td>
-                        <td style={{...CSS.rtd,fontSize:10}}>{s.coef}</td>
-                        <td style={{...CSS.rtd,fontSize:10}}>{tauxH||"—"}</td>
-                        <td style={{...CSS.rtd,fontSize:10,fontWeight:700,color:s.abattement?"#27ae60":"#ccc"}}>{s.abattement?"OUI":"NON"}</td>
-                        <td style={CSS.rtd}>{c.H}</td>
-                        <td style={{...CSS.rtd,color:c.hs25>0?"#e67e22":"#ccc",fontWeight:c.hs25>0?700:400}}>{c.hs25>0?c.hs25:"—"}</td>
-                        <td style={{...CSS.rtd,color:c.hs50>0?"#c0392b":"#ccc",fontWeight:c.hs50>0?700:400}}>{c.hs50>0?c.hs50:"—"}</td>
-                        <td style={{...CSS.rtd,color:c.absH>0?"#e74c3c":"#ccc"}}>{c.absH>0?c.absH:"—"}</td>
-                        <td style={{...CSS.rtd,textAlign:"left",fontSize:10}}>
+                      <tr key={s.id} style={{background:rowBg,borderBottom:"1px solid #d0d8e8"}}>
+                        <td style={{padding:"6px 10px",fontWeight:700,fontSize:11,borderRight:"1px solid #d0d8e8",color:"#1a3a5c"}}>{s.nom}</td>
+                        <td style={{...CSS.rtd,fontSize:9,borderRight:"1px solid #d0d8e8",color:"#555"}}>{s.contrat}</td>
+                        <td style={{...CSS.rtd,fontSize:10,borderRight:"1px solid #d0d8e8",fontWeight:600}}>{s.coef}</td>
+                        <td style={{...CSS.rtd,fontSize:10,borderRight:"1px solid #d0d8e8"}}>{tauxH||"—"}</td>
+                        <td style={{...CSS.rtd,fontSize:10,fontWeight:700,borderRight:"2px solid #aaa",color:s.abattement?"#27ae60":"#ccc"}}>{s.abattement?"OUI":"NON"}</td>
+                        <td style={{...CSS.rtd,fontWeight:700,borderRight:"1px solid #d0d8e8",color:"#1a3a5c"}}>{c.H}</td>
+                        <td style={{...CSS.rtd,fontWeight:c.hs25>0?700:400,borderRight:"1px solid #d0d8e8",color:c.hs25>0?"#e67e22":"#ccc"}}>{c.hs25>0?c.hs25:"—"}</td>
+                        <td style={{...CSS.rtd,fontWeight:c.hs50>0?700:400,borderRight:"1px solid #d0d8e8",color:c.hs50>0?"#c0392b":"#ccc"}}>{c.hs50>0?c.hs50:"—"}</td>
+                        <td style={{...CSS.rtd,fontWeight:c.absH>0?700:400,borderRight:"2px solid #aaa",color:c.absH>0?"#8e44ad":"#ccc"}}>{c.absH>0?c.absH:"—"}</td>
+                        <td style={{...CSS.rtd,textAlign:"left",fontSize:9,borderRight:"2px solid #aaa",minWidth:180}}>
                           {c.absEntries.map(([m,d])=>{
                             const dates=d.dates.sort();
                             const dStr=dates.length===1?fmtDateFR(dates[0]):`du ${fmtDateFR(dates[0])} au ${fmtDateFR(dates[dates.length-1])}`;
-                            return <div key={m} style={{color:"#e74c3c"}}>{d.heures}h · {m} · {dStr}</div>;
+                            return <div key={m} style={{color:"#8e44ad",fontWeight:600}}>{d.heures}h · {m} · {dStr}</div>;
                           })}
                         </td>
-                        <td style={{...CSS.rtd,fontSize:10}}>{c.primes.map(p=>`${p.montant}€ ${p.libelle||""}`).join(" / ")||"—"}</td>
-                        <td style={CSS.rtd}>{c.isForfait?"—":c.paniers||"—"}</td>
-                        {ZONES.map(z=><td key={`tj${z}`} style={{...CSS.rtd,fontSize:10,color:c.trajet[z]>0?"#2980b9":"#ddd"}}>{c.trajet[z]||""}</td>)}
-                        {ZONES.map(z=><td key={`tr${z}`} style={{...CSS.rtd,fontSize:10,background:"#f0f5ff",color:c.transport[z]>0?"#1a5276":"#ddd"}}>{c.transport[z]||""}</td>)}
-                        <td style={CSS.rtd}>{ex.acompte||"—"}</td>
-                        <td style={{...CSS.rtd,fontSize:10,textAlign:"left"}}>{obs||"—"}</td>
+                        <td style={{...CSS.rtd,fontSize:10,borderRight:"1px solid #d0d8e8",color:"#27ae60",fontWeight:600}}>{c.primes.map(p=>`${p.montant}€`).join("/")||"—"}</td>
+                        <td style={{...CSS.rtd,fontWeight:600,borderRight:"2px solid #aaa",color:"#16a085"}}>{c.isForfait?"—":c.paniers||"—"}</td>
+                        {ZONES.map(z=><td key={`tj${z}`} style={{...CSS.rtd,fontSize:10,borderRight:"1px solid #d0d8e8",color:c.trajet[z]>0?"#2980b9":"#ddd",fontWeight:c.trajet[z]>0?700:400,background:c.trajet[z]>0?"#eaf4fb":rowBg}}>{c.trajet[z]||""}</td>)}
+                        {ZONES.map((z,zi)=><td key={`tr${z}`} style={{...CSS.rtd,fontSize:10,borderRight:zi===9?"2px solid #aaa":"1px solid #d0d8e8",color:c.transport[z]>0?"#1a5276":"#ddd",fontWeight:c.transport[z]>0?700:400,background:c.transport[z]>0?"#d6eaf8":rowBg}}>{c.transport[z]||""}</td>)}
+                        <td style={{...CSS.rtd,borderRight:"1px solid #d0d8e8"}}>{ex.acompte||"—"}</td>
+                        <td style={{...CSS.rtd,fontSize:10,textAlign:"left",minWidth:140}}>{obs||"—"}</td>
                       </tr>
                     );
                   })}
@@ -1143,6 +1177,7 @@ export default function App() {
                 <th style={CSS.rth}>Contrat</th>
                 <th style={CSS.rth}>Coef.</th>
                 <th style={CSS.rth}>Taux H</th>
+                <th style={CSS.rth}>H mensuel</th>
                 <th style={CSS.rth}>Abatt.</th>
                 <th style={CSS.rth}>Action</th>
               </tr></thead>
@@ -1155,6 +1190,10 @@ export default function App() {
                     <td style={CSS.rtd}>
                       <input type="number" style={{...CSS.input,width:80}} value={s.tauxH||""}
                         onChange={e=>setSalaries(p=>p.map(x=>x.id===s.id?{...x,tauxH:parseFloat(e.target.value)||null}:x))}/>
+                    </td>
+                    <td style={CSS.rtd}>
+                      <input type="number" style={{...CSS.input,width:65}} value={s.hMensuel||151.67}
+                        onChange={e=>setSalaries(p=>p.map(x=>x.id===s.id?{...x,hMensuel:parseFloat(e.target.value)||151.67}:x))}/>
                     </td>
                     <td style={{...CSS.rtd,textAlign:"center"}}>
                       <input type="checkbox" checked={s.abattement||false}
