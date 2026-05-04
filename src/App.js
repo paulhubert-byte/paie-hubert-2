@@ -41,13 +41,13 @@ const ZONES  = [1,2,3,4,5,6,7,8,9,10];
 
 // ─── Salariés de base ─────────────────────────────────────────────────────────
 const SALARIES_DEFAUT = [
-  { id:1, nom:"CHEIKH Djamel",      contrat:"CDI",      coef:250,      tauxH:15.507, abattement:true  },
-  { id:2, nom:"COULIBALY Sekou",    contrat:"Apprenti", coef:"Apprent",tauxH:8.316,  abattement:false },
-  { id:3, nom:"EL YAHYAOUI Mourad", contrat:"CDI",      coef:250,      tauxH:15.507, abattement:true  },
-  { id:4, nom:"LANNEE Xavier",      contrat:"CDI",      coef:270,      tauxH:16.464, abattement:true  },
-  { id:5, nom:"MOREAU Dominique",   contrat:"CDI",      coef:250,      tauxH:15.507, abattement:true  },
-  { id:6, nom:"VINCENT Dominique",  contrat:"CDI",      coef:270,      tauxH:16.464, abattement:true  },
-  { id:7, nom:"HUBERT Paul",        contrat:"CDI",      coef:"Cadre",  tauxH:null,   abattement:false },
+  { id:1, nom:"CHEIKH Djamel",      contrat:"CDI",      coef:250,      tauxH:15.507, abattement:true,  hMensuel:151.67 },
+  { id:2, nom:"COULIBALY Sekou",    contrat:"Apprenti", coef:"Apprent",tauxH:8.316,  abattement:false, hMensuel:151.67 },
+  { id:3, nom:"EL YAHYAOUI Mourad", contrat:"CDI",      coef:250,      tauxH:15.507, abattement:true,  hMensuel:151.67 },
+  { id:4, nom:"LANNEE Xavier",      contrat:"CDI",      coef:270,      tauxH:16.464, abattement:true,  hMensuel:151.67 },
+  { id:5, nom:"MOREAU Dominique",   contrat:"CDI",      coef:250,      tauxH:15.507, abattement:true,  hMensuel:151.67 },
+  { id:6, nom:"VINCENT Dominique",  contrat:"CDI",      coef:270,      tauxH:16.464, abattement:true,  hMensuel:151.67 },
+  { id:7, nom:"HUBERT Paul",        contrat:"CDI",      coef:"Cadre",  tauxH:null,   abattement:false, hMensuel:151.67 },
 ];
 
 // ─── Utilitaires ──────────────────────────────────────────────────────────────
@@ -151,7 +151,7 @@ function calcMois(semaines, salId, moisIdx, annee, salaries) {
 
   const absEntries=Object.entries(absMapJours);
   const absH=absEntries.reduce((s,[,v])=>s+v.heures,0);
-  const H = isForfait ? null : Math.round((H_MOIS - absH + hs25 + hs50)*100)/100;
+  const H = sal?.hMensuel || H_MOIS;
 
   return {
     H, hs25:Math.round(hs25*100)/100, hs50:Math.round(hs50*100)/100,
@@ -276,6 +276,7 @@ async function genererExcel(moisIdx, annee, semaines, salaries, chantiers, extra
     rowData[0] = sal.contrat;
     rowData[1] = tauxH;
     if(!c.isForfait) rowData[3] = c.H;
+    else rowData[3] = sal.hMensuel||H_MOIS;
     rowData[4] = c.hs25||null;
     rowData[5] = c.hs50||null;
     if(!c.isForfait) rowData[11] = c.paniers||null;
@@ -1055,7 +1056,7 @@ export default function App() {
                         <td style={{...CSS.rtd,fontSize:10}}>{s.coef}</td>
                         <td style={{...CSS.rtd,fontSize:10}}>{tauxH||"—"}</td>
                         <td style={{...CSS.rtd,fontSize:10,fontWeight:700,color:s.abattement?"#27ae60":"#ccc"}}>{s.abattement?"OUI":"NON"}</td>
-                        <td style={CSS.rtd}>{c.isForfait?"—":c.H}</td>
+                        <td style={CSS.rtd}>{c.H}</td>
                         <td style={{...CSS.rtd,color:c.hs25>0?"#e67e22":"#ccc",fontWeight:c.hs25>0?700:400}}>{c.hs25>0?c.hs25:"—"}</td>
                         <td style={{...CSS.rtd,color:c.hs50>0?"#c0392b":"#ccc",fontWeight:c.hs50>0?700:400}}>{c.hs50>0?c.hs50:"—"}</td>
                         <td style={{...CSS.rtd,color:c.absH>0?"#e74c3c":"#ccc"}}>{c.absH>0?c.absH:"—"}</td>
