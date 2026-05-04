@@ -1,0 +1,43 @@
+@media print {
+  @page { size: A3 landscape; margin: 8mm; }
+
+  body {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Masquer navigation et boutons */
+  .no-print { display: none !important; }
+
+  /* Afficher en-tête impression */
+  .print-only { display: block !important; }
+
+  /* Tableau compact */
+  table {
+    font-size: 7pt !important;
+    width: 100% !important;
+    table-layout: auto;
+    border-collapse: collapse;
+  }
+  th, td {
+    padding: 2px 2px !important;
+    font-size: 7pt !important;
+  }
+
+  /* Colonnes zones très étroites (max 31 trajets/mois) */
+  .zone-col {
+    width: 16px !important;
+    max-width: 16px !important;
+    font-size: 6pt !important;
+    padding: 1px !important;
+  }
+
+  /* Conserver les couleurs de fond */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+
+  div { overflow: visible !important; }
+  tr { page-break-inside: avoid; }
+}
