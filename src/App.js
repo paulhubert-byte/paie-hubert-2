@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import "./print.css";
 
 // ─── Firebase ─────────────────────────────────────────────────────────────────
 import { initializeApp } from "firebase/app";
@@ -498,8 +499,10 @@ export default function App() {
 
     const h=parseFloat(jour.heures)||0;
     const ref=hRef(salaire, jour.dateStr);
+
+    // Jour férié → 0h par défaut, mais si on saisit des heures c'est exceptionnel
+    if(jour.ferie){
       if(h===0){
-        // Cas normal : pas travaillé, absence = heures de référence
         setSemaines(p=>p.map(s=>{
           if(s.id!==semId)return s;
           const sa=s.saisies[salId];
@@ -507,7 +510,6 @@ export default function App() {
           return{...s,saisies:{...s.saisies,[salId]:{...sa,jours}}};
         }));
       } else {
-        // Exceptionnel : travail un jour férié, pas d'absence
         setSemaines(p=>p.map(s=>{
           if(s.id!==semId)return s;
           const sa=s.saisies[salId];
@@ -610,22 +612,6 @@ export default function App() {
 
   return (
     <div style={CSS.root}>
-      <style>{`
-        @media print {
-          @page { size: A3 landscape; margin: 8mm; }
-          body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-          .no-print { display: none !important; }
-          .print-only { display: block !important; }
-          table { font-size: 7pt !important; width: 100% !important; table-layout: auto; border-collapse: collapse; }
-          th, td { padding: 2px 2px !important; font-size: 7pt !important; }
-          /* Colonnes zones très étroites : Z1..Z10 trajet et transport */
-          .zone-col { width: 16px !important; max-width: 16px !important; font-size: 6pt !important; padding: 1px !important; }
-          /* Conserver couleurs */
-          * { -webkit-print-color-adjust: exact !important; color-adjust: exact !important; }
-          div { overflow: visible !important; }
-          tr { page-break-inside: avoid; }
-        }
-      `}</style>
       {/* HEADER */}
       <div style={CSS.header} className="no-print">
         <div style={CSS.headerL}>
