@@ -1014,94 +1014,61 @@ export default function App() {
             <div style={{display:"flex",gap:8}}>
               <button style={{...CSS.btnExp,background:"#27ae60"}}
                 onClick={async()=>{
-                  const XLSX=await import("https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs");
-                  const wb=XLSX.utils.book_new();
+                  const XS=await import("https://cdn.jsdelivr.net/npm/xlsx-style@0.8.13/+esm").catch(()=>null);
+                  const XLSX=XS||await import("https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs");
+                  const hs=!!XS;
                   const moisNom=MOIS[mois-1];
-
-                  // Couleurs groupes
-                  const GRP={
-                    sal:"1A3A5C", sal2:"2E4A6C",
-                    ttrav:"2980B9", h:"3498DB", hs25:"E67E22", hs50:"C0392B",
-                    abs:"8E44AD", abs2:"9B59B6",
-                    prime:"27AE60", panier:"16A085",
-                    trajet:"2471A3", transport:"1A5276",
-                    divers:"6C3483"
-                  };
-
-                  const aoa=[];
-                  const merges=[];
-                  const addM=(r,c,re,ce)=>merges.push({s:{r,c},e:{r:re,c:ce}});
-
+                  const semMoisExp=semaines.filter(s=>s.annee===annee&&(s.mois===mois||(s.saisies&&Object.values(s.saisies)[0]?.jours?.some(j=>{const d=new Date(j.dateStr);return d.getMonth()+1===mois&&d.getFullYear()===annee;}))));
+                  const C={sal:"FF1A3A5C",sal2:"FF2E4A6C",ttrav:"FF2980B9",h:"FF3498DB",hs25:"FFE67E22",hs50:"FFC0392B",abs:"FF8E44AD",abs2:"FF9B59B6",prime:"FF27AE60",panier:"FF16A085",trajet:"FF2471A3",transport:"FF1A5276",divers:"FF6C3483",rowP:"FFEEF2F8",rowI:"FFFFFFFF",wh:"FFFFFFFF",gr:"FFCCCCCC"};
+                  const mk=(v,bg,fc,bold,sz,ha)=>({v:v??null,t:typeof v==="number"?"n":"s",s:hs?{fill:{patternType:"solid",fgColor:{rgb:bg||"FFFFFFFF"}},font:{name:"Arial",sz:sz||10,bold:!!bold,color:{rgb:fc||"FF333333"}},alignment:{horizontal:ha||"center",vertical:"center"},border:{top:{style:"thin",color:{rgb:"FFCCCCCC"}},bottom:{style:"thin",color:{rgb:"FFCCCCCC"}},left:{style:"thin",color:{rgb:"FFCCCCCC"}},right:{style:"thin",color:{rgb:"FFCCCCCC"}}}}:{}});
+                  const ws={};
+                  const RC=(r,c)=>XLSX.utils.encode_cell({r,c});
+                  let maxR=0;
+                  const sc=(r,c,v,bg,fc,bold,sz,ha)=>{ws[RC(r,c)]=mk(v,bg,fc,bold,sz,ha);if(r>maxR)maxR=r;};
                   // Titre
-                  const r0=Array(36).fill(null);
-                  r0[0]=`RÉCAPITULATIF PAIE — ${moisNom.toUpperCase()} ${annee}`;
-                  aoa.push(r0);
-                  addM(0,0,0,35);
-                  aoa.push(Array(36).fill(null));
-
-                  // Ligne groupes
-                  const rg=Array(36).fill(null);
-                  rg[0]="SALARIÉ"; rg[5]="TEMPS DE TRAVAIL"; rg[8]="ABSENCES";
-                  rg[11]="PRIME / PANIER"; rg[13]="TRAJET"; rg[23]="TRANSPORT";
-                  rg[33]="DIVERS";
-                  aoa.push(rg);
-                  addM(2,0,2,4); addM(2,5,2,7); addM(2,8,2,10);
-                  addM(2,11,2,12); addM(2,13,2,22); addM(2,23,2,32); addM(2,33,2,35);
-
-                  // Ligne colonnes
-                  const rc=["Salarié","Contrat","Coef.","Taux H","Abt.",
-                    "H mois","HS 25%","HS 50%",
-                    "Abs. H","Motif","Dates",
-                    "Prime","Paniers",
-                    ...ZONES.map(z=>`Z${z}`),...ZONES.map(z=>`Z${z}`),
-                    "Acompte","Saisie","Observations"];
-                  aoa.push(rc);
-
+                  sc(0,0,`RÉCAPITULATIF PAIE — ${moisNom.toUpperCase()} ${annee}`,C.sal,C.wh,true,14,"center");
+                  // Groupes
+                  [[0,4,"SALARIÉ",C.sal],[5,7,"TEMPS DE TRAVAIL",C.ttrav],[8,10,"ABSENCES",C.abs],[11,12,"PRIME",C.prime],[13,13,"PANIER",C.panier],[14,23,"TRAJET",C.trajet],[24,33,"TRANSPORT",C.transport],[34,36,"DIVERS",C.divers]]
+                    .forEach(([c1,c2,lab,bg])=>{for(let c=c1;c<=c2;c++)sc(2,c,c===c1?lab:null,bg,C.wh,true,10);});
+                  // Colonnes
+                  [["Salarié",C.sal2,"left"],["Contrat",C.sal2],["Coef.",C.sal2],["Taux H",C.sal2],["Abt.",C.sal2],["H mois",C.h],["HS 25%",C.hs25],["HS 50%",C.hs50],["Abs. H",C.abs2],["Motif",C.abs2],["Dates",C.abs2],["Montant",C.prime],["Libellé",C.prime],["Paniers",C.panier],...ZONES.map(z=>[`Z${z}`,C.trajet]),...ZONES.map(z=>[`Z${z}`,C.transport]),["Acompte",C.divers],["Saisie",C.divers],["Observations",C.divers,"left"]]
+                    .forEach(([lab,bg,ha],i)=>sc(3,i,lab,bg,C.wh,true,9,ha||"center"));
                   // Données
-                  const semMoisExp=semaines.filter(s=>
-                    s.annee===annee&&(s.mois===mois||
-                    (s.saisies&&Object.values(s.saisies)[0]?.jours?.some(j=>{
-                      const d=new Date(j.dateStr);
-                      return d.getMonth()+1===mois&&d.getFullYear()===annee;
-                    }))));
-
-                  salaries.forEach(s=>{
-                    const c=calcMois(semMoisExp,s.id,mois,annee,salaries);
-                    const ex=extras[s.id]||{};
+                  salaries.forEach((s,i)=>{
+                    const row=4+i,c=calcMois(semMoisExp,s.id,mois,annee,salaries),ex=extras[s.id]||{};
                     const tauxH=(ex.tauxH!==undefined&&ex.tauxH!=='')?ex.tauxH:s.tauxH;
-                    const absMotifs=c.absEntries.map(([m])=>m).join(" / ")||null;
-                    const absDates=c.absEntries.map(([m,d])=>{
-                      const dates=d.dates.sort();
-                      return dates.length===1?fmtDateFR(dates[0]):`${fmtDateFR(dates[0])} au ${fmtDateFR(dates[dates.length-1])}`;
-                    }).join(" / ")||null;
+                    const bg=i%2===0?C.rowP:C.rowI;
+                    const absM=c.absEntries.map(([m])=>m).join(" / ")||null;
+                    const absD=c.absEntries.map(([m,d])=>{const dates=d.dates.sort();return dates.length===1?fmtDateFR(dates[0]):`${fmtDateFR(dates[0])} au ${fmtDateFR(dates[dates.length-1])}`;}).join(" / ")||null;
                     const obs=[ex.fraisPro&&`Rembt frais pro ${ex.fraisPro}€`,ex.obs].filter(Boolean).join(" | ")||null;
-                    const row=[
-                      s.nom, s.contrat, s.coef, tauxH||null, s.abattement?"OUI":"NON",
-                      c.H, c.hs25||null, c.hs50||null,
-                      c.absH||null, absMotifs, absDates,
-                      c.primes.length>0?c.primes.map(p=>p.montant).join("/"):null,
-                      c.isForfait?null:c.paniers||null,
-                      ...ZONES.map(z=>c.trajet[z]||null),
-                      ...ZONES.map(z=>c.transport[z]||null),
-                      ex.acompte||null, ex.saisieArr||null, obs
-                    ];
-                    aoa.push(row);
+                    const p0=c.primes[0];
+                    sc(row,0,s.nom,bg,C.sal,true,11,"left");
+                    sc(row,1,s.contrat,bg,"FF555555",false,9);
+                    sc(row,2,s.coef,bg,"FF333333",true);
+                    sc(row,3,tauxH||"—",bg);
+                    sc(row,4,s.abattement?"OUI":"NON",bg,s.abattement?C.prime:C.gr,true);
+                    sc(row,5,c.H,bg,C.sal,true);
+                    sc(row,6,c.hs25||"—",bg,c.hs25?C.hs25:C.gr,!!c.hs25);
+                    sc(row,7,c.hs50||"—",bg,c.hs50?C.hs50:C.gr,!!c.hs50);
+                    sc(row,8,c.absH||"—",bg,c.absH?C.abs:C.gr,!!c.absH);
+                    sc(row,9,absM||"—",bg,c.absH?C.abs:C.gr);
+                    sc(row,10,absD||"—",bg,c.absH?C.abs:C.gr);
+                    sc(row,11,p0?parseFloat(p0.montant)||"—":"—",bg,p0?C.prime:C.gr,!!p0);
+                    sc(row,12,p0?p0.libelle||"—":"—",bg,p0?C.prime:C.gr);
+                    sc(row,13,c.isForfait?"—":c.paniers||"—",bg,c.paniers?C.panier:C.gr,!!c.paniers);
+                    ZONES.forEach((z,j)=>{const v=c.trajet[z]||0;sc(row,14+j,v||null,v?"FFEAF4FB":bg,v?C.trajet:C.gr,!!v);});
+                    ZONES.forEach((z,j)=>{const v=c.transport[z]||0;sc(row,24+j,v||null,v?"FFD6EAF8":bg,v?C.transport:C.gr,!!v);});
+                    sc(row,34,ex.acompte||"—",bg);
+                    sc(row,35,ex.saisieArr||"—",bg);
+                    sc(row,36,obs||"—",bg,"FF333333",false,10,"left");
                   });
-
-                  const ws=XLSX.utils.aoa_to_sheet(aoa);
-                  ws["!merges"]=merges;
-                  ws["!cols"]=[
-                    {wch:22},{wch:9},{wch:7},{wch:8},{wch:5},
-                    {wch:8},{wch:8},{wch:8},
-                    {wch:8},{wch:18},{wch:22},
-                    {wch:10},{wch:8},
-                    ...Array(10).fill({wch:5}),
-                    ...Array(10).fill({wch:5}),
-                    {wch:10},{wch:10},{wch:30}
-                  ];
+                  ws["!ref"]=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:maxR,c:36}});
+                  ws["!merges"]=[{s:{r:0,c:0},e:{r:0,c:36}},{s:{r:2,c:0},e:{r:2,c:4}},{s:{r:2,c:5},e:{r:2,c:7}},{s:{r:2,c:8},e:{r:2,c:10}},{s:{r:2,c:11},e:{r:2,c:12}},{s:{r:2,c:14},e:{r:2,c:23}},{s:{r:2,c:24},e:{r:2,c:33}},{s:{r:2,c:34},e:{r:2,c:36}}];
+                  ws["!cols"]=[{wch:22},{wch:9},{wch:7},{wch:8},{wch:5},{wch:8},{wch:8},{wch:8},{wch:8},{wch:18},{wch:22},{wch:10},{wch:18},{wch:8},...Array(10).fill({wch:5}),...Array(10).fill({wch:5}),{wch:10},{wch:10},{wch:30}];
                   ws["!freeze"]={xSplit:1,ySplit:4};
-                  XLSX.utils.book_append_sheet(wb,ws,moisNom);
-                  XLSX.writeFile(wb,`Recap_paie_${moisNom}_${annee}.xlsx`);
+                  const wb2=XLSX.utils.book_new();
+                  XLSX.utils.book_append_sheet(wb2,ws,moisNom);
+                  XLSX.writeFile(wb2,`Recap_paie_${moisNom}_${annee}.xlsx`);
                 }}>
                 📊 Récap Excel</button>
               <button style={CSS.btnExp}
@@ -1120,7 +1087,8 @@ export default function App() {
                     <th colSpan={5} style={{...CSS.rth,background:"#1a3a5c",textAlign:"center",borderRight:"2px solid #fff",fontSize:10}}>SALARIÉ</th>
                     <th colSpan={3} style={{...CSS.rth,background:"#2980b9",textAlign:"center",borderRight:"2px solid #fff",fontSize:10}}>TEMPS DE TRAVAIL</th>
                     <th colSpan={3} style={{...CSS.rth,background:"#8e44ad",textAlign:"center",borderRight:"2px solid #fff",fontSize:10}}>ABSENCES</th>
-                    <th colSpan={2} style={{...CSS.rth,background:"#27ae60",textAlign:"center",borderRight:"2px solid #fff",fontSize:10}}>PRIME / PANIER</th>
+                    <th colSpan={2} style={{...CSS.rth,background:"#27ae60",textAlign:"center",borderRight:"2px solid #fff",fontSize:10}}>PRIME</th>
+                    <th colSpan={1} style={{...CSS.rth,background:"#16a085",textAlign:"center",borderRight:"2px solid #fff",fontSize:10}}>PANIER</th>
                     <th colSpan={10} style={{...CSS.rth,background:"#2471a3",textAlign:"center",borderRight:"2px solid #fff",fontSize:10}}>TRAJET</th>
                     <th colSpan={10} style={{...CSS.rth,background:"#1a5276",textAlign:"center",borderRight:"2px solid #fff",fontSize:10}}>TRANSPORT</th>
                     <th colSpan={3} style={{...CSS.rth,background:"#6c3483",textAlign:"center",fontSize:10}}>DIVERS</th>
@@ -1138,7 +1106,8 @@ export default function App() {
                     <th style={{...CSS.rth,background:"#9b59b6",borderRight:"1px solid #a569bd"}}>Abs. H</th>
                     <th style={{...CSS.rth,background:"#9b59b6",borderRight:"1px solid #a569bd"}}>Motif</th>
                     <th style={{...CSS.rth,background:"#9b59b6",minWidth:130,borderRight:"2px solid #fff"}}>Dates</th>
-                    <th style={{...CSS.rth,background:"#27ae60",borderRight:"1px solid #2ecc71"}}>Prime</th>
+                    <th style={{...CSS.rth,background:"#27ae60",borderRight:"1px solid #2ecc71"}}>Montant</th>
+                    <th style={{...CSS.rth,background:"#27ae60",borderRight:"2px solid #fff"}}>Libellé</th>
                     <th style={{...CSS.rth,background:"#16a085",borderRight:"2px solid #fff"}}>Paniers</th>
                     {ZONES.map(z=><th key={`tj${z}`} style={{...CSS.rth,background:"#2980b9",fontSize:9,borderRight:"1px solid #5dade2",minWidth:28}}>Z{z}</th>)}
                     {ZONES.map((z,i)=><th key={`tr${z}`} style={{...CSS.rth,background:"#1a5276",fontSize:9,borderRight:i===9?"2px solid #fff":"1px solid #2471a3",minWidth:28}}>Z{z}</th>)}
@@ -1173,7 +1142,8 @@ export default function App() {
                         <td style={{...CSS.rtd,fontWeight:c.absH>0?700:400,borderRight:"1px solid #d0d8e8",color:c.absH>0?"#8e44ad":"#ccc"}}>{c.absH>0?c.absH:"—"}</td>
                         <td style={{...CSS.rtd,fontSize:9,borderRight:"1px solid #d0d8e8",color:c.absH>0?"#8e44ad":"#ccc",fontWeight:600}}>{absMotifs}</td>
                         <td style={{...CSS.rtd,fontSize:9,borderRight:"2px solid #aaa",color:c.absH>0?"#8e44ad":"#ccc"}}>{absDates}</td>
-                        <td style={{...CSS.rtd,fontSize:10,borderRight:"1px solid #d0d8e8",color:"#27ae60",fontWeight:600}}>{c.primes.map(p=>`${p.montant}€`).join("/")||"—"}</td>
+                        <td style={{...CSS.rtd,fontSize:10,borderRight:"1px solid #d0d8e8",color:"#27ae60",fontWeight:600}}>{c.primes.map(p=>p.montant?`${p.montant}€`:"").join("/")||"—"}</td>
+                        <td style={{...CSS.rtd,fontSize:9,borderRight:"2px solid #aaa",color:"#27ae60"}}>{c.primes.map(p=>p.libelle||"").join(" / ")||"—"}</td>
                         <td style={{...CSS.rtd,fontWeight:600,borderRight:"2px solid #aaa",color:"#16a085"}}>{c.isForfait?"—":c.paniers||"—"}</td>
                         {ZONES.map(z=><td key={`tj${z}`} style={{...CSS.rtd,fontSize:10,borderRight:"1px solid #d0d8e8",color:c.trajet[z]>0?"#2980b9":"#ddd",fontWeight:c.trajet[z]>0?700:400,background:c.trajet[z]>0?"#eaf4fb":rowBg}}>{c.trajet[z]||""}</td>)}
                         {ZONES.map((z,zi)=><td key={`tr${z}`} style={{...CSS.rtd,fontSize:10,borderRight:zi===9?"2px solid #aaa":"1px solid #d0d8e8",color:c.transport[z]>0?"#1a5276":"#ddd",fontWeight:c.transport[z]>0?700:400,background:c.transport[z]>0?"#d6eaf8":rowBg}}>{c.transport[z]||""}</td>)}
