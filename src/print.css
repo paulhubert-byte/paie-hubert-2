@@ -12,32 +12,48 @@
   /* Afficher en-tête impression */
   .print-only { display: block !important; }
 
-  /* Tableau compact */
-  table {
-    font-size: 7pt !important;
-    width: 100% !important;
-    table-layout: auto;
-    border-collapse: collapse;
-  }
-  th, td {
-    padding: 2px 2px !important;
-    font-size: 7pt !important;
+  /* Conteneur du tableau : pas de restriction de hauteur */
+  .print-container {
+    overflow: visible !important;
+    height: auto !important;
+    max-height: none !important;
+    flex: none !important;
   }
 
-  /* Colonnes zones très étroites (max 31 trajets/mois) */
-  .zone-col {
-    width: 16px !important;
-    max-width: 16px !important;
-    font-size: 6pt !important;
-    padding: 1px !important;
+  /* Forcer tout sur une seule page */
+  body, html { height: auto !important; }
+  div { overflow: visible !important; height: auto !important; }
+
+  /* Tableau : tout tenir sur la largeur */
+  table {
+    font-size: 6.5pt !important;
+    width: 100% !important;
+    table-layout: fixed !important;
+    border-collapse: collapse !important;
+    page-break-inside: auto !important;
   }
+  th, td {
+    padding: 2px 1px !important;
+    font-size: 6.5pt !important;
+    word-break: break-word !important;
+    overflow: hidden !important;
+  }
+
+  /* Colonnes zones très étroites */
+  .zone-col {
+    width: 14px !important;
+    max-width: 14px !important;
+    font-size: 5.5pt !important;
+    padding: 1px 0px !important;
+  }
+
+  /* Pas de coupure entre lignes du tableau */
+  thead { display: table-header-group !important; }
+  tr { page-break-inside: avoid !important; page-break-after: auto !important; }
 
   /* Conserver les couleurs de fond */
   * {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
-
-  div { overflow: visible !important; }
-  tr { page-break-inside: avoid; }
 }
