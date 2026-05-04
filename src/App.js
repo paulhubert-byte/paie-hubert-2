@@ -87,9 +87,15 @@ function getFeries(y) {
   };
 }
 
-// Heures standard pour un jour donné
+function hRef(sal, dateStr) {
+  const isCadre = sal?.coef==="Cadre" || sal?.hJour===7;
+  if(isCadre) return 7;
+  const dow = new Date(dateStr).getDay();
+  return dow===5 ? H_VEN : H_NORM;
+}
+// Alias sans salarié (pour les cas où on n'a pas le salarié)
 function hStd(dateStr) {
-  const dow = new Date(dateStr).getDay(); // 5=vendredi
+  const dow = new Date(dateStr).getDay();
   return dow===5 ? H_VEN : H_NORM;
 }
 
@@ -451,13 +457,11 @@ export default function App() {
       mois:moisSem, lundi:fmtDate(lundi),
       saisies: Object.fromEntries(salaries.map(s=>{
         const jours=joursBase.map(j=>{
-          const hRef = s.id===7 ? 7 : hStd(j.dateStr);
+          const hr = hRef(s, j.dateStr);
           if(j.ferie){
-            // Jour férié : 0h travaillé par défaut, absence = heures de référence
-            return {...j, heures:"0", valide:true, absHeures:String(hRef), motifAbs:"Jour férié", presaisie:false};
+            return {...j, heures:"0", valide:true, absHeures:String(hr), motifAbs:"Jour férié", presaisie:false};
           }
-          // Jour normal : heures pré-remplies, pas encore validées
-          return {...j, heures:String(hRef), valide:false, absHeures:"", motifAbs:"", presaisie:true};
+          return {...j, heures:String(hr), valide:false, absHeures:"", motifAbs:"", presaisie:true};
         });
         return [s.id, {jours, absences:[], primes:[]}];
       }))
@@ -493,10 +497,7 @@ export default function App() {
     if(!jour||!salaire)return;
 
     const h=parseFloat(jour.heures)||0;
-    const ref=salaire.id===7?7:hStd(jour.dateStr);
-
-    // Jour férié → 0h par défaut, mais si on saisit des heures c'est exceptionnel
-    if(jour.ferie){
+    const ref=hRef(salaire, jour.dateStr);
       if(h===0){
         // Cas normal : pas travaillé, absence = heures de référence
         setSemaines(p=>p.map(s=>{
@@ -730,8 +731,8 @@ export default function App() {
                                   if(s.id!==semId)return s;
                                   const jours=s.saisies[salId].jours.map(j=>{
                                     if(j.ferie)return j;
-                                    const hRef=sal.id===7?7:hStd(j.dateStr);
-                                    return{...j,heures:String(hRef),valide:true,presaisie:false,absHeures:"",motifAbs:""};
+                                    const hRefJ=hRef(sal,j.dateStr);
+                                    return{...j,heures:String(hRefJ),valide:true,presaisie:false,absHeures:"",motifAbs:""};
                                   });
                                   // 35h validées → supprimer toutes les absences
                                   return{...s,saisies:{...s.saisies,[salId]:{...s.saisies[salId],jours,absences:[]}}};
@@ -770,8 +771,8 @@ export default function App() {
                               if(s.id!==semId)return s;
                               const jours=s.saisies[salId].jours.map(j=>{
                                 if(j.ferie)return j;
-                                const hRef=sal.id===7?7:hStd(j.dateStr);
-                                return{...j,heures:"0",absHeures:String(hRef),motifAbs:motif,valide:true};
+                                const hRefJ=hRef(sal,j.dateStr);
+                                return{...j,heures:"0",absHeures:String(hRefJ),motifAbs:motif,valide:true};
                               });
                               const totalAbs=jours.filter(j=>!j.ferie).reduce((acc,j)=>acc+(parseFloat(j.absHeures)||0),0);
                               const absences=[{heures:totalAbs,motif,dateStr:jours[0]?.dateStr,id:Date.now().toString()}];
@@ -817,9 +818,9 @@ export default function App() {
                     </thead>
                     <tbody>
                       {saisieAct.jours.map((j,i)=>{
-                        const hRef = sal.id===7 ? 7 : hStd(j.dateStr);
+                        const hRefJ=hRef(sal,j.dateStr);
                         const estPresaisie = !j.valide && !j.ferie;
-                        const estAbsent    = j.valide && parseFloat(j.heures) < hRef && !j.ferie && j.chantier!=="CFA";
+                        const estAbsent    = j.valide && parseFloat(j.heures) < hRefJ && !j.ferie && j.chantier!=="CFA";
                         const estFerieNonTravaille = j.ferie && parseFloat(j.heures)===0;
                         const bg = estFerieNonTravaille ? "#fffbea"
                                  : j.ferie              ? "#fff8dc"  // férié mais travaillé
@@ -838,7 +839,7 @@ export default function App() {
                                 {!j.ferie&&(
                                   <button
                                     onClick={()=>validerHeures(semId,salId,i)}
-                                    title={j.valide ? "Validé" : `Valider ${hRef}h`}
+                                    title={j.valide ? "Validé" : `Valider ${hRefJ}h`}
                                     style={{
                                       width:32, height:24, borderRadius:5, cursor:"pointer",
                                       fontSize:10, fontWeight:700,
@@ -872,7 +873,7 @@ export default function App() {
                                   }}
                                   onBlur={()=>validerHeures(semId,salId,i)}
                                 />
-                                <span style={{fontSize:9,color:"#bbb"}}>/{hRef}</span>
+                                <span style={{fontSize:9,color:"#bbb"}}>/{hRefJ}</span>
                               </div>
                             </td>
                             <td style={CSS.jtd}>
