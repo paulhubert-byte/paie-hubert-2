@@ -35,7 +35,7 @@
   /* Conserver les couleurs de fond */
   * {
     -webkit-print-color-adjust: exact !important;
-    color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 
   div { overflow: visible !important; }
