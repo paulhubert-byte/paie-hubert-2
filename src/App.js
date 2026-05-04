@@ -112,7 +112,7 @@ function calcMois(semaines, salId, moisIdx, annee, salaries) {
   const primes=[];
 
   // Absences directement depuis les jours saisis (source de vérité)
-  const absMapJours={};
+  const absRaw = []; // [{motif, heures, dateStr}] — un par jour
 
   semaines.forEach(sem=>{
     const saisie = sem.saisies?.[salId];
@@ -129,28 +129,41 @@ function calcMois(semaines, salId, moisIdx, annee, salaries) {
 
     joursDuMois.forEach(j=>{
       const h=parseFloat(j.heures)||0;
-      // Paniers : >4h, pas CFA, pas forfait
       if(h>4 && j.chantier!=="CFA" && !isForfait) paniers++;
-      // Trajet/transport : uniquement si chantier renseigné et zone définie
       if(j.chantier && j.chantier!=="CFA" && j.zone){
         trajet[j.zone]=(trajet[j.zone]||0)+1;
         if(!j.vehEnt) transport[j.zone]=(transport[j.zone]||0)+1;
       }
-      // Absences depuis les jours
       const absH=parseFloat(j.absHeures)||0;
       if(absH>0 && j.motifAbs){
-        const k=j.motifAbs;
-        if(!absMapJours[k]) absMapJours[k]={heures:0,dates:[]};
-        absMapJours[k].heures=Math.round((absMapJours[k].heures+absH)*100)/100;
-        absMapJours[k].dates.push(j.dateStr);
+        absRaw.push({motif:j.motifAbs, heures:absH, dateStr:j.dateStr});
       }
     });
 
     (saisie.primes||[]).forEach(p=>{ if(p.montant||p.libelle) primes.push(p); });
   });
 
-  const absEntries=Object.entries(absMapJours);
-  const absH=absEntries.reduce((s,[,v])=>s+v.heures,0);
+  // Regrouper les absences par plages consécutives du même motif
+  // Ex: CP lundi+mardi+mercredi → une entrée "CP: 23.49h du 07/04 au 09/04"
+  // Tri par date puis regroupement
+  absRaw.sort((a,b)=>a.dateStr.localeCompare(b.dateStr));
+  const absEntries=[]; // [{motif, heures, dateDebut, dateFin}]
+  absRaw.forEach(ab=>{
+    const last=absEntries[absEntries.length-1];
+    // Même motif ET jour consécutif (écart ≤ 3 jours pour passer le week-end)
+    const isConsecutif = last && last.motif===ab.motif && (()=>{
+      const d1=new Date(last.dateFin), d2=new Date(ab.dateStr);
+      return (d2-d1)/86400000 <= 3;
+    })();
+    if(isConsecutif){
+      last.heures=Math.round((last.heures+ab.heures)*100)/100;
+      last.dateFin=ab.dateStr;
+    } else {
+      absEntries.push({motif:ab.motif, heures:ab.heures, dateDebut:ab.dateStr, dateFin:ab.dateStr});
+    }
+  });
+
+  const absH=absEntries.reduce((s,e)=>s+e.heures,0);
   const H = sal?.hMensuel || H_MOIS;
 
   return {
@@ -161,7 +174,12 @@ function calcMois(semaines, salId, moisIdx, annee, salaries) {
   };
 }
 
-// ─── Génération Excel ─────────────────────────────────────────────────────────
+// Formate une entrée d'absence en texte
+function fmtAbs(ab){
+  const debut=fmtDateFR(ab.dateDebut), fin=fmtDateFR(ab.dateFin);
+  const dates=debut===fin ? debut : `du ${debut} au ${fin}`;
+  return {heures:ab.heures, motif:ab.motif, dates};
+}
 async function genererExcel(moisIdx, annee, semaines, salaries, chantiers, extras) {
   const XLSX = await import("https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs");
   const wb   = XLSX.utils.book_new();
@@ -258,12 +276,8 @@ async function genererExcel(moisIdx, annee, semaines, salaries, chantiers, extra
     rowNom[1] = sal.coef!=="Cadre" ? sal.coef : null;
     rowNom[2] = sal.abattement ? "OUI" : null;
     if(absEntries.length>0){
-      const[m,d]=absEntries[0];
-      const dates=d.dates.sort();
-      rowNom[6]=d.heures||null; rowNom[7]=m;
-      rowNom[8]=dates.length===1 ? fmtDateFR(dates[0])
-              : dates.length>1  ? `du ${fmtDateFR(dates[0])} au ${fmtDateFR(dates[dates.length-1])}`
-              : null;
+      const ab=fmtAbs(absEntries[0]);
+      rowNom[6]=ab.heures||null; rowNom[7]=ab.motif; rowNom[8]=ab.dates;
     }
     if(c.primes.length>0){
       rowNom[9]=parseFloat(c.primes[0].montant)||null;
@@ -296,12 +310,8 @@ async function genererExcel(moisIdx, annee, semaines, salaries, chantiers, extra
     for(let i=0;i<nbSuppl;i++){
       const rowX = Array(NC).fill(null);
       if(i+1<absEntries.length){
-        const[m,d]=absEntries[i+1];
-        const dates=d.dates.sort();
-        rowX[6]=d.heures||null; rowX[7]=m;
-        rowX[8]=dates.length===1 ? fmtDateFR(dates[0])
-               : dates.length>1  ? `du ${fmtDateFR(dates[0])} au ${fmtDateFR(dates[dates.length-1])}`
-               : null;
+        const ab=fmtAbs(absEntries[i+1]);
+        rowX[6]=ab.heures||null; rowX[7]=ab.motif; rowX[8]=ab.dates;
       }
       if(i+1<c.primes.length){
         rowX[9]=parseFloat(c.primes[i+1].montant)||null;
@@ -1038,8 +1048,8 @@ export default function App() {
                     const row=4+i,c=calcMois(semMoisExp,s.id,mois,annee,salaries),ex=extras[s.id]||{};
                     const tauxH=(ex.tauxH!==undefined&&ex.tauxH!=='')?ex.tauxH:s.tauxH;
                     const bg=i%2===0?C.rowP:C.rowI;
-                    const absM=c.absEntries.map(([m])=>m).join(" / ")||null;
-                    const absD=c.absEntries.map(([m,d])=>{const dates=d.dates.sort();return dates.length===1?fmtDateFR(dates[0]):`${fmtDateFR(dates[0])} au ${fmtDateFR(dates[dates.length-1])}`;}).join(" / ")||null;
+                    const absM=c.absEntries.map(e=>e.motif).join(" / ")||null;
+                    const absD=c.absEntries.map(e=>e.heures+'h · '+fmtAbs(e).dates).join(' / ')||null;
                     const obs=[ex.fraisPro&&`Rembt frais pro ${ex.fraisPro}€`,ex.obs].filter(Boolean).join(" | ")||null;
                     const p0=c.primes[0];
                     sc(row,0,s.nom,bg,C.sal,true,11,"left");
@@ -1124,11 +1134,8 @@ export default function App() {
                     const obs=[ex.fraisPro&&`Rembt frais pro ${ex.fraisPro}€`,ex.obs].filter(Boolean).join(" | ");
                     const rowBg = i%2===0?"#f0f4f8":"#ffffff";
                     // Absences : séparer motifs et dates
-                    const absMotifs=c.absEntries.map(([m])=>m).join(" / ")||"—";
-                    const absDates=c.absEntries.map(([m,d])=>{
-                      const dates=d.dates.sort();
-                      return dates.length===1?fmtDateFR(dates[0]):`${fmtDateFR(dates[0])}→${fmtDateFR(dates[dates.length-1])}`;
-                    }).join(" / ")||"—";
+                    const absMotifs=c.absEntries.map(e=>e.motif).join(" / ")||"—";
+                    const absDates=c.absEntries.map(e=>fmtAbs(e).dates).join(" / ")||"—";
                     return(
                       <tr key={s.id} style={{background:rowBg,borderBottom:"1px solid #d0d8e8"}}>
                         <td style={{padding:"6px 10px",fontWeight:700,fontSize:11,borderRight:"1px solid #d0d8e8",color:"#1a3a5c"}}>{s.nom}</td>
@@ -1140,8 +1147,12 @@ export default function App() {
                         <td style={{...CSS.rtd,fontWeight:c.hs25>0?700:400,borderRight:"1px solid #d0d8e8",color:c.hs25>0?"#e67e22":"#ccc"}}>{c.hs25>0?c.hs25:"—"}</td>
                         <td style={{...CSS.rtd,fontWeight:c.hs50>0?700:400,borderRight:"2px solid #aaa",color:c.hs50>0?"#c0392b":"#ccc"}}>{c.hs50>0?c.hs50:"—"}</td>
                         <td style={{...CSS.rtd,fontWeight:c.absH>0?700:400,borderRight:"1px solid #d0d8e8",color:c.absH>0?"#8e44ad":"#ccc"}}>{c.absH>0?c.absH:"—"}</td>
-                        <td style={{...CSS.rtd,fontSize:9,borderRight:"1px solid #d0d8e8",color:c.absH>0?"#8e44ad":"#ccc",fontWeight:600}}>{absMotifs}</td>
-                        <td style={{...CSS.rtd,fontSize:9,borderRight:"2px solid #aaa",color:c.absH>0?"#8e44ad":"#ccc"}}>{absDates}</td>
+                        <td style={{...CSS.rtd,fontSize:9,borderRight:"1px solid #d0d8e8",color:c.absH>0?"#8e44ad":"#ccc",fontWeight:600}}>
+                          {c.absEntries.map((e,i)=><div key={i}>{e.motif}</div>)||"—"}
+                        </td>
+                        <td style={{...CSS.rtd,fontSize:9,borderRight:"2px solid #aaa",color:c.absH>0?"#8e44ad":"#ccc"}}>
+                          {c.absEntries.map((e,i)=><div key={i}>{e.heures}h · {fmtAbs(e).dates}</div>)||"—"}
+                        </td>
                         <td style={{...CSS.rtd,fontSize:10,borderRight:"1px solid #d0d8e8",color:"#27ae60",fontWeight:600}}>{c.primes.map(p=>p.montant?`${p.montant}€`:"").join("/")||"—"}</td>
                         <td style={{...CSS.rtd,fontSize:9,borderRight:"2px solid #aaa",color:"#27ae60"}}>{c.primes.map(p=>p.libelle||"").join(" / ")||"—"}</td>
                         <td style={{...CSS.rtd,fontWeight:600,borderRight:"2px solid #aaa",color:"#16a085"}}>{c.isForfait?"—":c.paniers||"—"}</td>
