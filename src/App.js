@@ -616,18 +616,14 @@ export default function App() {
           body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
           .no-print { display: none !important; }
           .print-only { display: block !important; }
-          /* Masquer tout sauf le récap */
-          nav, .nav, [class*="header"], [class*="nav"] { display: none !important; }
-          /* Tableau : tout visible, police réduite */
-          table { font-size: 7pt !important; width: 100% !important; }
-          th, td { padding: 2px 3px !important; font-size: 7pt !important; }
-          /* Conserver les couleurs de fond */
+          table { font-size: 7pt !important; width: 100% !important; table-layout: auto; border-collapse: collapse; }
+          th, td { padding: 2px 2px !important; font-size: 7pt !important; }
+          /* Colonnes zones très étroites : Z1..Z10 trajet et transport */
+          .zone-col { width: 16px !important; max-width: 16px !important; font-size: 6pt !important; padding: 1px !important; }
+          /* Conserver couleurs */
           * { -webkit-print-color-adjust: exact !important; color-adjust: exact !important; }
-          /* Pas de saut de page dans le tableau */
-          table { page-break-inside: avoid; }
-          tr { page-break-inside: avoid; }
-          /* Cacher overflow pour que tout tienne */
           div { overflow: visible !important; }
+          tr { page-break-inside: avoid; }
         }
       `}</style>
       {/* HEADER */}
@@ -1085,10 +1081,10 @@ export default function App() {
                     <th style={{...CSS.rth,background:"#9b59b6",borderRight:"1px solid #a569bd",minWidth:100}}>Motif</th>
                     <th style={{...CSS.rth,background:"#9b59b6",minWidth:130,borderRight:"2px solid #fff"}}>Dates</th>
                     <th style={{...CSS.rth,background:"#27ae60",borderRight:"1px solid #2ecc71"}}>Montant</th>
-                    <th style={{...CSS.rth,background:"#27ae60",borderRight:"2px solid #fff"}}>Libellé</th>
+                    <th style={{...CSS.rth,background:"#27ae60",borderRight:"2px solid #fff",minWidth:160}}>Libellé</th>
                     <th style={{...CSS.rth,background:"#16a085",borderRight:"2px solid #fff"}}>Paniers</th>
-                    {ZONES.map(z=><th key={`tj${z}`} style={{...CSS.rth,background:"#2980b9",fontSize:9,borderRight:"1px solid #5dade2",minWidth:28}}>Z{z}</th>)}
-                    {ZONES.map((z,i)=><th key={`tr${z}`} style={{...CSS.rth,background:"#1a5276",fontSize:9,borderRight:i===9?"2px solid #fff":"1px solid #2471a3",minWidth:28}}>Z{z}</th>)}
+                    {ZONES.map(z=><th key={`tj${z}`} style={{...CSS.rth,background:"#2980b9",fontSize:8,borderRight:"1px solid #5dade2",minWidth:22,maxWidth:28}} className="zone-col">Z{z}</th>)}
+                    {ZONES.map((z,i)=><th key={`tr${z}`} style={{...CSS.rth,background:"#1a5276",fontSize:8,borderRight:i===9?"2px solid #fff":"1px solid #2471a3",minWidth:22,maxWidth:28}} className="zone-col">Z{z}</th>)}
                     <th style={{...CSS.rth,background:"#6c3483",borderRight:"1px solid #7d3c98"}}>Acompte</th>
                     <th style={{...CSS.rth,background:"#6c3483",borderRight:"1px solid #7d3c98"}}>Saisie</th>
                     <th style={{...CSS.rth,background:"#6c3483",minWidth:140}}>Observations</th>
@@ -1122,11 +1118,15 @@ export default function App() {
                         <td style={{...CSS.rtd,fontSize:9,borderRight:"2px solid #aaa",color:absColor,verticalAlign:"top"}}>
                           {c.absEntries.length>0 ? c.absEntries.map((e,k)=><div key={k} style={{padding:"1px 0"}}>{fmtAbs(e).dates}</div>) : "—"}
                         </td>
-                        <td style={{...CSS.rtd,fontSize:10,borderRight:"1px solid #d0d8e8",color:"#27ae60",fontWeight:600}}>{c.primes.map(p=>p.montant?`${p.montant}€`:"").join(" / ")||"—"}</td>
-                        <td style={{...CSS.rtd,fontSize:9,borderRight:"2px solid #aaa",color:"#27ae60"}}>{c.primes.map(p=>p.libelle||"").join(" / ")||"—"}</td>
+                        <td style={{...CSS.rtd,fontSize:10,borderRight:"1px solid #d0d8e8",color:"#27ae60",fontWeight:600,verticalAlign:"top"}}>
+                          {c.primes.length>0 ? c.primes.map((p,k)=><div key={k}>{p.montant?`${p.montant}€`:"—"}</div>) : "—"}
+                        </td>
+                        <td style={{...CSS.rtd,fontSize:9,borderRight:"2px solid #aaa",color:"#27ae60",textAlign:"left",minWidth:160}}>
+                          {c.primes.length>0 ? c.primes.map((p,k)=><div key={k}>{p.libelle||"—"}</div>) : "—"}
+                        </td>
                         <td style={{...CSS.rtd,fontWeight:600,borderRight:"2px solid #aaa",color:"#16a085"}}>{c.isForfait?"—":c.paniers||"—"}</td>
-                        {ZONES.map(z=><td key={`tj${z}`} style={{...CSS.rtd,fontSize:10,borderRight:"1px solid #d0d8e8",color:c.trajet[z]>0?"#2980b9":"#ddd",fontWeight:c.trajet[z]>0?700:400,background:c.trajet[z]>0?"#eaf4fb":rowBg}}>{c.trajet[z]||""}</td>)}
-                        {ZONES.map((z,zi)=><td key={`tr${z}`} style={{...CSS.rtd,fontSize:10,borderRight:zi===9?"2px solid #aaa":"1px solid #d0d8e8",color:c.transport[z]>0?"#1a5276":"#ddd",fontWeight:c.transport[z]>0?700:400,background:c.transport[z]>0?"#d6eaf8":rowBg}}>{c.transport[z]||""}</td>)}
+                        {ZONES.map(z=><td key={`tj${z}`} style={{...CSS.rtd,fontSize:9,padding:"4px 2px",borderRight:"1px solid #d0d8e8",color:c.trajet[z]>0?"#2980b9":"#ddd",fontWeight:c.trajet[z]>0?700:400,background:c.trajet[z]>0?"#eaf4fb":rowBg,maxWidth:28}} className="zone-col">{c.trajet[z]||""}</td>)}
+                        {ZONES.map((z,zi)=><td key={`tr${z}`} style={{...CSS.rtd,fontSize:9,padding:"4px 2px",borderRight:zi===9?"2px solid #aaa":"1px solid #d0d8e8",color:c.transport[z]>0?"#1a5276":"#ddd",fontWeight:c.transport[z]>0?700:400,background:c.transport[z]>0?"#d6eaf8":rowBg,maxWidth:28}} className="zone-col">{c.transport[z]||""}</td>)}
                         <td style={{...CSS.rtd,borderRight:"1px solid #d0d8e8"}}>{ex.acompte||"—"}</td>
                         <td style={{...CSS.rtd,borderRight:"1px solid #d0d8e8"}}>{ex.saisieArr||"—"}</td>
                         <td style={{...CSS.rtd,fontSize:10,textAlign:"left",minWidth:140}}>{obs||"—"}</td>
