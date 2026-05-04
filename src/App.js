@@ -1092,7 +1092,6 @@ export default function App() {
             <div style={{overflowX:"auto",flex:1}} id="recap-table">
               <table style={{...CSS.rtbl,borderCollapse:"collapse"}}>
                 <thead>
-                  {/* Ligne 1 : groupes colorés */}
                   <tr>
                     <th colSpan={5} style={{...CSS.rth,background:"#1a3a5c",textAlign:"center",borderRight:"2px solid #fff",fontSize:10}}>SALARIÉ</th>
                     <th colSpan={3} style={{...CSS.rth,background:"#2980b9",textAlign:"center",borderRight:"2px solid #fff",fontSize:10}}>TEMPS DE TRAVAIL</th>
@@ -1103,7 +1102,6 @@ export default function App() {
                     <th colSpan={10} style={{...CSS.rth,background:"#1a5276",textAlign:"center",borderRight:"2px solid #fff",fontSize:10}}>TRANSPORT</th>
                     <th colSpan={3} style={{...CSS.rth,background:"#6c3483",textAlign:"center",fontSize:10}}>DIVERS</th>
                   </tr>
-                  {/* Ligne 2 : colonnes détaillées */}
                   <tr>
                     <th style={{...CSS.rth,background:"#2e4a6c",textAlign:"left",minWidth:130,borderRight:"1px solid #3a5a7c"}}>Salarié</th>
                     <th style={{...CSS.rth,background:"#2e4a6c",fontSize:9,borderRight:"1px solid #3a5a7c"}}>Contrat</th>
@@ -1113,8 +1111,8 @@ export default function App() {
                     <th style={{...CSS.rth,background:"#3498db",borderRight:"1px solid #5dade2"}}>H mois</th>
                     <th style={{...CSS.rth,background:"#e67e22",borderRight:"1px solid #f0a030"}}>HS 25%</th>
                     <th style={{...CSS.rth,background:"#c0392b",borderRight:"2px solid #fff"}}>HS 50%</th>
-                    <th style={{...CSS.rth,background:"#9b59b6",borderRight:"1px solid #a569bd"}}>Abs. H</th>
-                    <th style={{...CSS.rth,background:"#9b59b6",borderRight:"1px solid #a569bd"}}>Motif</th>
+                    <th style={{...CSS.rth,background:"#9b59b6",borderRight:"1px solid #a569bd"}}>Heures</th>
+                    <th style={{...CSS.rth,background:"#9b59b6",borderRight:"1px solid #a569bd",minWidth:100}}>Motif</th>
                     <th style={{...CSS.rth,background:"#9b59b6",minWidth:130,borderRight:"2px solid #fff"}}>Dates</th>
                     <th style={{...CSS.rth,background:"#27ae60",borderRight:"1px solid #2ecc71"}}>Montant</th>
                     <th style={{...CSS.rth,background:"#27ae60",borderRight:"2px solid #fff"}}>Libellé</th>
@@ -1133,11 +1131,9 @@ export default function App() {
                     const tauxH=(ex.tauxH!==undefined&&ex.tauxH!=='')?ex.tauxH:s.tauxH;
                     const obs=[ex.fraisPro&&`Rembt frais pro ${ex.fraisPro}€`,ex.obs].filter(Boolean).join(" | ");
                     const rowBg = i%2===0?"#f0f4f8":"#ffffff";
-                    // Absences : séparer motifs et dates
-                    const absMotifs=c.absEntries.map(e=>e.motif).join(" / ")||"—";
-                    const absDates=c.absEntries.map(e=>fmtAbs(e).dates).join(" / ")||"—";
+                    const absColor = c.absEntries.length>0?"#8e44ad":"#ccc";
                     return(
-                      <tr key={s.id} style={{background:rowBg,borderBottom:"1px solid #d0d8e8"}}>
+                      <tr key={s.id} style={{background:rowBg,borderBottom:"2px solid #c0c8d8"}}>
                         <td style={{padding:"6px 10px",fontWeight:700,fontSize:11,borderRight:"1px solid #d0d8e8",color:"#1a3a5c"}}>{s.nom}</td>
                         <td style={{...CSS.rtd,fontSize:9,borderRight:"1px solid #d0d8e8",color:"#555"}}>{s.contrat}</td>
                         <td style={{...CSS.rtd,fontSize:10,borderRight:"1px solid #d0d8e8",fontWeight:600}}>{s.coef}</td>
@@ -1146,14 +1142,17 @@ export default function App() {
                         <td style={{...CSS.rtd,fontWeight:700,borderRight:"1px solid #d0d8e8",color:"#1a3a5c"}}>{c.H}</td>
                         <td style={{...CSS.rtd,fontWeight:c.hs25>0?700:400,borderRight:"1px solid #d0d8e8",color:c.hs25>0?"#e67e22":"#ccc"}}>{c.hs25>0?c.hs25:"—"}</td>
                         <td style={{...CSS.rtd,fontWeight:c.hs50>0?700:400,borderRight:"2px solid #aaa",color:c.hs50>0?"#c0392b":"#ccc"}}>{c.hs50>0?c.hs50:"—"}</td>
-                        <td style={{...CSS.rtd,fontWeight:c.absH>0?700:400,borderRight:"1px solid #d0d8e8",color:c.absH>0?"#8e44ad":"#ccc"}}>{c.absH>0?c.absH:"—"}</td>
-                        <td style={{...CSS.rtd,fontSize:9,borderRight:"1px solid #d0d8e8",color:c.absH>0?"#8e44ad":"#ccc",fontWeight:600}}>
-                          {c.absEntries.map((e,i)=><div key={i}>{e.motif}</div>)||"—"}
+                        {/* ABSENCES : une ligne par entrée dans chaque cellule */}
+                        <td style={{...CSS.rtd,fontSize:9,borderRight:"1px solid #d0d8e8",color:absColor,fontWeight:600,verticalAlign:"top"}}>
+                          {c.absEntries.length>0 ? c.absEntries.map((e,k)=><div key={k} style={{padding:"1px 0"}}>{e.heures}h</div>) : "—"}
                         </td>
-                        <td style={{...CSS.rtd,fontSize:9,borderRight:"2px solid #aaa",color:c.absH>0?"#8e44ad":"#ccc"}}>
-                          {c.absEntries.map((e,i)=><div key={i}>{e.heures}h · {fmtAbs(e).dates}</div>)||"—"}
+                        <td style={{...CSS.rtd,fontSize:9,borderRight:"1px solid #d0d8e8",color:absColor,textAlign:"left",verticalAlign:"top"}}>
+                          {c.absEntries.length>0 ? c.absEntries.map((e,k)=><div key={k} style={{padding:"1px 0"}}>{e.motif}</div>) : "—"}
                         </td>
-                        <td style={{...CSS.rtd,fontSize:10,borderRight:"1px solid #d0d8e8",color:"#27ae60",fontWeight:600}}>{c.primes.map(p=>p.montant?`${p.montant}€`:"").join("/")||"—"}</td>
+                        <td style={{...CSS.rtd,fontSize:9,borderRight:"2px solid #aaa",color:absColor,verticalAlign:"top"}}>
+                          {c.absEntries.length>0 ? c.absEntries.map((e,k)=><div key={k} style={{padding:"1px 0"}}>{fmtAbs(e).dates}</div>) : "—"}
+                        </td>
+                        <td style={{...CSS.rtd,fontSize:10,borderRight:"1px solid #d0d8e8",color:"#27ae60",fontWeight:600}}>{c.primes.map(p=>p.montant?`${p.montant}€`:"").join(" / ")||"—"}</td>
                         <td style={{...CSS.rtd,fontSize:9,borderRight:"2px solid #aaa",color:"#27ae60"}}>{c.primes.map(p=>p.libelle||"").join(" / ")||"—"}</td>
                         <td style={{...CSS.rtd,fontWeight:600,borderRight:"2px solid #aaa",color:"#16a085"}}>{c.isForfait?"—":c.paniers||"—"}</td>
                         {ZONES.map(z=><td key={`tj${z}`} style={{...CSS.rtd,fontSize:10,borderRight:"1px solid #d0d8e8",color:c.trajet[z]>0?"#2980b9":"#ddd",fontWeight:c.trajet[z]>0?700:400,background:c.trajet[z]>0?"#eaf4fb":rowBg}}>{c.trajet[z]||""}</td>)}
