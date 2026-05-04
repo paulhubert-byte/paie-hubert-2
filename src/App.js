@@ -1026,6 +1026,7 @@ export default function App() {
             <div style={CSS.bigTitle}>Récapitulatif — {MOIS[mois-1]} {annee}</div>
             <button style={{...CSS.btnExp,background:"#1a3a5c"}}
               onClick={()=>{
+                alert("⚠️ Dans la boîte d'impression :\n• Choisir « Paysage »\n• Cocher « Graphiques d'arrière-plan » (ou « Arrière-plans ») pour imprimer en couleur\n• Format A3 si disponible, sinon A4");
                 window.print();
               }}>
               🖨️ Imprimer / PDF
@@ -1041,7 +1042,7 @@ export default function App() {
           </div>
           {semMois.length===0&&<Vide icone="📊" texte="Aucune semaine saisie pour ce mois"/>}
           {semMois.length>0&&(
-            <div style={{overflowX:"auto",flex:1}} id="recap-table">
+            <div style={{overflowX:"auto",flex:1}} id="recap-table" className="print-container">
               <table style={{...CSS.rtbl,borderCollapse:"collapse"}}>
                 <thead>
                   <tr>
