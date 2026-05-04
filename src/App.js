@@ -610,8 +610,28 @@ export default function App() {
 
   return (
     <div style={CSS.root}>
+      <style>{`
+        @media print {
+          @page { size: A3 landscape; margin: 8mm; }
+          body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+          .no-print { display: none !important; }
+          .print-only { display: block !important; }
+          /* Masquer tout sauf le récap */
+          nav, .nav, [class*="header"], [class*="nav"] { display: none !important; }
+          /* Tableau : tout visible, police réduite */
+          table { font-size: 7pt !important; width: 100% !important; }
+          th, td { padding: 2px 3px !important; font-size: 7pt !important; }
+          /* Conserver les couleurs de fond */
+          * { -webkit-print-color-adjust: exact !important; color-adjust: exact !important; }
+          /* Pas de saut de page dans le tableau */
+          table { page-break-inside: avoid; }
+          tr { page-break-inside: avoid; }
+          /* Cacher overflow pour que tout tienne */
+          div { overflow: visible !important; }
+        }
+      `}</style>
       {/* HEADER */}
-      <div style={CSS.header}>
+      <div style={CSS.header} className="no-print">
         <div style={CSS.headerL}>
           <div style={CSS.logo}>H</div>
           <div>
@@ -631,7 +651,7 @@ export default function App() {
       </div>
 
       {/* NAV */}
-      <div style={CSS.nav}>
+      <div style={CSS.nav} className="no-print">
         {[["saisie","📝 Saisie"],["recap","📊 Récap"],["chantiers","📍 Chantiers"],["salaries","👷 Salariés"]].map(([k,l])=>(
           <button key={k} style={{...CSS.navBtn,...(vue===k?CSS.navOn:{})}} onClick={()=>setVue(k)}>{l}</button>
         ))}
@@ -1020,72 +1040,21 @@ export default function App() {
       {/* ══ RÉCAP ══ */}
       {vue==="recap"&&(
         <div style={CSS.body}>
-          <div style={CSS.recapBar}>
+          <div style={CSS.recapBar} className="no-print">
             <div style={CSS.bigTitle}>Récapitulatif — {MOIS[mois-1]} {annee}</div>
-            <div style={{display:"flex",gap:8}}>
-              <button style={{...CSS.btnExp,background:"#27ae60"}}
-                onClick={async()=>{
-                  const XS=await import("https://cdn.jsdelivr.net/npm/xlsx-style@0.8.13/+esm").catch(()=>null);
-                  const XLSX=XS||await import("https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs");
-                  const hs=!!XS;
-                  const moisNom=MOIS[mois-1];
-                  const semMoisExp=semaines.filter(s=>s.annee===annee&&(s.mois===mois||(s.saisies&&Object.values(s.saisies)[0]?.jours?.some(j=>{const d=new Date(j.dateStr);return d.getMonth()+1===mois&&d.getFullYear()===annee;}))));
-                  const C={sal:"FF1A3A5C",sal2:"FF2E4A6C",ttrav:"FF2980B9",h:"FF3498DB",hs25:"FFE67E22",hs50:"FFC0392B",abs:"FF8E44AD",abs2:"FF9B59B6",prime:"FF27AE60",panier:"FF16A085",trajet:"FF2471A3",transport:"FF1A5276",divers:"FF6C3483",rowP:"FFEEF2F8",rowI:"FFFFFFFF",wh:"FFFFFFFF",gr:"FFCCCCCC"};
-                  const mk=(v,bg,fc,bold,sz,ha)=>({v:v??null,t:typeof v==="number"?"n":"s",s:hs?{fill:{patternType:"solid",fgColor:{rgb:bg||"FFFFFFFF"}},font:{name:"Arial",sz:sz||10,bold:!!bold,color:{rgb:fc||"FF333333"}},alignment:{horizontal:ha||"center",vertical:"center"},border:{top:{style:"thin",color:{rgb:"FFCCCCCC"}},bottom:{style:"thin",color:{rgb:"FFCCCCCC"}},left:{style:"thin",color:{rgb:"FFCCCCCC"}},right:{style:"thin",color:{rgb:"FFCCCCCC"}}}}:{}});
-                  const ws={};
-                  const RC=(r,c)=>XLSX.utils.encode_cell({r,c});
-                  let maxR=0;
-                  const sc=(r,c,v,bg,fc,bold,sz,ha)=>{ws[RC(r,c)]=mk(v,bg,fc,bold,sz,ha);if(r>maxR)maxR=r;};
-                  // Titre
-                  sc(0,0,`RÉCAPITULATIF PAIE — ${moisNom.toUpperCase()} ${annee}`,C.sal,C.wh,true,14,"center");
-                  // Groupes
-                  [[0,4,"SALARIÉ",C.sal],[5,7,"TEMPS DE TRAVAIL",C.ttrav],[8,10,"ABSENCES",C.abs],[11,12,"PRIME",C.prime],[13,13,"PANIER",C.panier],[14,23,"TRAJET",C.trajet],[24,33,"TRANSPORT",C.transport],[34,36,"DIVERS",C.divers]]
-                    .forEach(([c1,c2,lab,bg])=>{for(let c=c1;c<=c2;c++)sc(2,c,c===c1?lab:null,bg,C.wh,true,10);});
-                  // Colonnes
-                  [["Salarié",C.sal2,"left"],["Contrat",C.sal2],["Coef.",C.sal2],["Taux H",C.sal2],["Abt.",C.sal2],["H mois",C.h],["HS 25%",C.hs25],["HS 50%",C.hs50],["Abs. H",C.abs2],["Motif",C.abs2],["Dates",C.abs2],["Montant",C.prime],["Libellé",C.prime],["Paniers",C.panier],...ZONES.map(z=>[`Z${z}`,C.trajet]),...ZONES.map(z=>[`Z${z}`,C.transport]),["Acompte",C.divers],["Saisie",C.divers],["Observations",C.divers,"left"]]
-                    .forEach(([lab,bg,ha],i)=>sc(3,i,lab,bg,C.wh,true,9,ha||"center"));
-                  // Données
-                  salaries.forEach((s,i)=>{
-                    const row=4+i,c=calcMois(semMoisExp,s.id,mois,annee,salaries),ex=extras[s.id]||{};
-                    const tauxH=(ex.tauxH!==undefined&&ex.tauxH!=='')?ex.tauxH:s.tauxH;
-                    const bg=i%2===0?C.rowP:C.rowI;
-                    const absM=c.absEntries.map(e=>e.motif).join(" / ")||null;
-                    const absD=c.absEntries.map(e=>e.heures+'h · '+fmtAbs(e).dates).join(' / ')||null;
-                    const obs=[ex.fraisPro&&`Rembt frais pro ${ex.fraisPro}€`,ex.obs].filter(Boolean).join(" | ")||null;
-                    const p0=c.primes[0];
-                    sc(row,0,s.nom,bg,C.sal,true,11,"left");
-                    sc(row,1,s.contrat,bg,"FF555555",false,9);
-                    sc(row,2,s.coef,bg,"FF333333",true);
-                    sc(row,3,tauxH||"—",bg);
-                    sc(row,4,s.abattement?"OUI":"NON",bg,s.abattement?C.prime:C.gr,true);
-                    sc(row,5,c.H,bg,C.sal,true);
-                    sc(row,6,c.hs25||"—",bg,c.hs25?C.hs25:C.gr,!!c.hs25);
-                    sc(row,7,c.hs50||"—",bg,c.hs50?C.hs50:C.gr,!!c.hs50);
-                    sc(row,8,c.absH||"—",bg,c.absH?C.abs:C.gr,!!c.absH);
-                    sc(row,9,absM||"—",bg,c.absH?C.abs:C.gr);
-                    sc(row,10,absD||"—",bg,c.absH?C.abs:C.gr);
-                    sc(row,11,p0?parseFloat(p0.montant)||"—":"—",bg,p0?C.prime:C.gr,!!p0);
-                    sc(row,12,p0?p0.libelle||"—":"—",bg,p0?C.prime:C.gr);
-                    sc(row,13,c.isForfait?"—":c.paniers||"—",bg,c.paniers?C.panier:C.gr,!!c.paniers);
-                    ZONES.forEach((z,j)=>{const v=c.trajet[z]||0;sc(row,14+j,v||null,v?"FFEAF4FB":bg,v?C.trajet:C.gr,!!v);});
-                    ZONES.forEach((z,j)=>{const v=c.transport[z]||0;sc(row,24+j,v||null,v?"FFD6EAF8":bg,v?C.transport:C.gr,!!v);});
-                    sc(row,34,ex.acompte||"—",bg);
-                    sc(row,35,ex.saisieArr||"—",bg);
-                    sc(row,36,obs||"—",bg,"FF333333",false,10,"left");
-                  });
-                  ws["!ref"]=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:maxR,c:36}});
-                  ws["!merges"]=[{s:{r:0,c:0},e:{r:0,c:36}},{s:{r:2,c:0},e:{r:2,c:4}},{s:{r:2,c:5},e:{r:2,c:7}},{s:{r:2,c:8},e:{r:2,c:10}},{s:{r:2,c:11},e:{r:2,c:12}},{s:{r:2,c:14},e:{r:2,c:23}},{s:{r:2,c:24},e:{r:2,c:33}},{s:{r:2,c:34},e:{r:2,c:36}}];
-                  ws["!cols"]=[{wch:22},{wch:9},{wch:7},{wch:8},{wch:5},{wch:8},{wch:8},{wch:8},{wch:8},{wch:18},{wch:22},{wch:10},{wch:18},{wch:8},...Array(10).fill({wch:5}),...Array(10).fill({wch:5}),{wch:10},{wch:10},{wch:30}];
-                  ws["!freeze"]={xSplit:1,ySplit:4};
-                  const wb2=XLSX.utils.book_new();
-                  XLSX.utils.book_append_sheet(wb2,ws,moisNom);
-                  XLSX.writeFile(wb2,`Recap_paie_${moisNom}_${annee}.xlsx`);
-                }}>
-                📊 Récap Excel</button>
-              <button style={CSS.btnExp}
-                onClick={()=>genererExcel(mois,annee,semaines,salaries,chantiers,extras)}>
-                ⬇ Exporter Excel (Saisie EV)
-              </button>
+            <button style={{...CSS.btnExp,background:"#1a3a5c"}}
+              onClick={()=>{
+                window.print();
+              }}>
+              🖨️ Imprimer / PDF
+            </button>
+          </div>
+          {/* En-tête visible uniquement à l'impression */}
+          <div className="print-only" style={{display:"none"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8,borderBottom:"2px solid #1a3a5c",paddingBottom:6}}>
+              <div style={{fontWeight:700,fontSize:16,color:"#1a3a5c"}}>HUBERT PEINTURE</div>
+              <div style={{fontWeight:700,fontSize:14,color:"#1a3a5c"}}>Variables de paie — {MOIS[mois-1]} {annee}</div>
+              <div style={{fontSize:11,color:"#888"}}>Édité le {new Date().toLocaleDateString("fr-FR")}</div>
             </div>
           </div>
           {semMois.length===0&&<Vide icone="📊" texte="Aucune semaine saisie pour ce mois"/>}
