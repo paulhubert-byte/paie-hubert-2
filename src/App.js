@@ -147,7 +147,11 @@ function calcMois(semaines, salId, moisIdx, annee, salaries) {
       }
     });
 
-    (saisie.primes||[]).forEach(p=>{ if(p.montant||p.libelle) primes.push(p); });
+    // Primes : uniquement si la semaine appartient à ce mois
+    // (évite le doublon sur les semaines à cheval)
+    if(sem.mois===moisIdx && sem.annee===annee){
+      (saisie.primes||[]).forEach(p=>{ if(p.montant||p.libelle) primes.push(p); });
+    }
   });
 
   // Regrouper les absences par plages consécutives du même motif
